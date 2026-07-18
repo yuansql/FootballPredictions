@@ -305,28 +305,9 @@ SLOT_INTEGRITY_CHECK:
 ; mode栏写: "POINT" 或 "RANGE(LOW/HIGH)·NO_NPXG"
 
 ═══════════════════════════════════════════════════════════════════════════════
-■ 5. 复盘校验（扩：加数据源失败归因）
+■ 5. （不做强制赛后复盘）
 ═══════════════════════════════════════════════════════════════════════════════
-[POST_MATCH_AUDIT]
-  Actual_Score="__-__"
-  Result_Check=[ ]Hit [ ]Miss [ ]Partial
-  Root_Cause:
-    [ ] Data Error (URL过时/滞后/劫持)
-    [ ] Sampling (N<6 → 收缩仍偏)
-    [ ] Injury Misread (名气≠Min%)
-    [ ] Black Swan (红牌/门将失误)
-    [ ] EPV_Underweighted
-    [ ] Model Bias
-    [ ] ★ NEW: DATA_UNAVAILABLE → 用 RAW_GOALS 冒充 npxG / 弱池零封当TIER_1抗压
-  Correction_Notes:
-    DATA_SOURCE_STATUS:
-      understat: ✅/❌ (which_step_broke)
-      tm_injuries: ✅/❌
-      oddsportal: ✅/❌
-      fifa_rank: ✅/❌
-      NO_NPXG_HIST_triggered: YES/NO → which_flag
-    __________________________________________________
-
-; ===== Hypothesis Log（同V16.1·不变）=====
+; 与 V17.3 主控一致：预测以赛前决策表为准，不要求赛后归档 / POST_MATCH_AUDIT。
+; 若赛前数据源失败，在决策表「风险」栏写 FLAG（如 NO_NPXG_HIST / UNK）即可。
 
 EOF
