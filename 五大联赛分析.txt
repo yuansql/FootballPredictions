@@ -1,0 +1,262 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║  【足球赛事预测全维闭环量化模型 V15.2】                                       ║
+║  （高阶精算 & 资金双驱半全场修正版 · 搜索链路硬化版）                          ║
+║                                                                              ║
+║  基于 V15.1 优化 — 核心变更：                                                 ║
+║  ① 删除"看起来权威"的无源引用 → 换成可执行的搜索指令链                       ║
+║  ② npxG / xG / xT / Z-Score 每一项绑定 SOURCE_TAG + 口径声明                  ║
+║  ③ xT（预期威胁）明确标注：搜索可达≠能抄表 → 降级为间接指标                  ║
+║  ④ 必发/大户资金：明确标注 UNAVAILABLE → 降格为赔率形态+公开市场信号         ║
+║  ⑤ 每个槽位 FAIL_PATH = UNK → 标FLAG → 绝不反向编造                          ║
+║  铁律继承 V17.3：[CORE_DOCTRINE] + ANTI_OVERFIT + 方向决断/破默认1-1          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 0-B. 数据源注册表（五大联赛专用 · 搜索优先链）
+═══════════════════════════════════════════════════════════════════════════════
+[DATA_SOURCE_REGISTRY_5LEAGUE]
+
+  ;; ── ★ 主轴：npxG / xG 赛季表 ──────────────────────────────────────────
+  UNDERSTAT = {
+      NAME       : "Understat.com — shot-level npxG model"
+      COVERAGE   : "EPL / La Liga / Serie A / Bundesliga / Ligue 1 / RFPL"
+      SEARCH_Q   : "[team_name] site:understat.com [league_code] [season]"
+                : "或直接开: https://understat.com/league/[CODE]/[SEASON] → 点 [team]"
+      FIELDS     : "xG / xGA / npxG / xGDiff / npxGD / matches_played / pts / position"
+      CAN_FETCH  : "整赛季表行（可直接抄数） / 也可进team页看逐场"
+      TRUST      : "★★★ HIGH — 唯一公开可核对的shot模型输出·页面内嵌JSON"
+      NOTES      : "这是框架指定的 npxG 主轴。任何用 raw xG 替代的行为必须标 [XG_MODEL_MISMATCH]"
+  }
+
+  ;; ── xT（预期威胁）── 诚实声明 ─────────────────────────────────────────
+  ;;  StatalSport / StatsBomb 的 xT 公开层已收紧（实测 Cloudflare保护）
+  ;;  搜得到的是二手展示（SofaScore/FotMob热度图 / FBref旧快照），不能直接当计算基
+  XT_SOURCE = {
+      NAME       : "xT — Expected Threat（间接代理模式）"
+      SEARCH_Q   : "[team] site:understat.com [league] [season] shots"
+                : "→ 逐场Shot表可导出（手动复制行列）→ 自己估威胁分布（场区分区计数）"
+                : "备选（降级）: 搜 '[team] site:sofascore.com heatmap' → 只看趋势不抄值"
+      USABLE_AS  : "序数比较（哪侧走廊更热）· NOT 绝对计量"
+      TRUST      : "★☆☆ LOW-ACCURACY（除非你自建Shot导出·否则禁入λ算术）"
+      RULE       : "xT值本身 → 仅写进 [战术胜负手] 描述栏 · 禁止写进 Lambda 公式"
+      NOTES      : "V15.1原文把xT和npxG并列为'高阶数据准绳'→ 必须降级为序数标记·否则过拟合"
+  }
+
+  ;; ── 逐场 xG（SofaScore · Understat逐场均可）──────────────────────────
+  SOFASCORE_MATCH = {
+      SEARCH_Q   : "[Home] [Away] site:sofascore.com [DD] [Mon] → 点进match page"
+                : "→ 统计区块找: 'xG A.B – B.A' / shots / keyPasses / possession"
+      TRUST      : "★★☆ MEDIUM（xG展示值可用·口径≠Understat·仅用于Last5滚均补刀）"
+  }
+
+  ;; ── 高阶防守数据（PPDA / 压迫强度）── 关键：搜得到但得自己算/抄──────
+  PPDA_SOURCE = {
+      METHOD     : "两种路径·选你能稳定复现的"
+      PATH_A     : "搜: [team] site:understat.com [league] [season] → team页 → 逐场列表（自己算 Passes Allowed / Def Actions）"
+      PATH_B     : "搜: '[team] PPDA [league] site:theanalyst.com' 或 'site:fbref.com [team] passing/opposition'（Cloudflare不稳定）"
+      PATH_C     : "降级: 用 SofaScore 赛后页的 pressed_% / 对方pass_accuracy 做序数标记"
+      OUTPUT     : "PPDA_est = [ ] 若算不出 → 写 UNK → [PPDA_UNAVAILABLE] → EPV不靠PPDA缩放"
+      NOTES      : "PPDA < 10 是V17.0 Physics Decay的关键输入·但必须承认：搜到≈看到数≠拿到时间序列CSV"
+  }
+
+  ;; ── 伤停（和V16.2一致·TM页稳定）────────────────────────────────────
+  TM_INJ = {
+      URL_PATTERN : "https://www.transfermarkt.com/[league-slug]/verletztespieler/wettbewerb/[CODE]"
+      SEARCH_Q    : "[team] site:transfermarkt.com injuries"
+      TRUST       : "★★★ HIGH（结构稳定·可核对URL）"
+  }
+
+  ;; ── 市场 / 赔率（赔率数字√ · 成交量✗）──────────────────────────────
+  ODDS = {
+      SEARCH_Q   : "site:oddsportal.com [Home] [Away] odds"
+      CAN_GET    : "open/close 1X2 · AH line · O/U line"
+      CANNOT_GET : "必发大户资金流入比例 / 散户笔数拆分（不公开）"
+      SMF_MODE    : "SHAPE_ONLY（见§5 资金层降格规则）"
+  }
+
+  ;; ── 口径冲突仲裁（五大联赛尤其容易踩）──────────────────────────────
+  XG_ARBITRATION = "
+    IF Understat.npxG 可用 → 一切 xG 引用必须标 MODEL=UNDERSTAT_npxG
+    IF 只能拿 SofaScore xG_display 或 FootyStats 数 → 必须标 MODEL=DISPLAY / PREMIUM_WALL
+    IF 两者混用且差 > 0.3/场 → 决策表写 [XG_MODEL_DISCREPANCY] → 以Understat为准
+    NEVER 用 '我看新闻说xG≈1.8' 当数据源
+  "
+
+;; ── 联赛代码速查（减少搜错）──────────────────────────────────────────
+UNDERSTAT_CODES = {
+    EPL     : "GB1"  →  URL = "https://understat.com/league/EPL/[YEAR]"
+    La_Liga : "ESP-La_Liga" → "https://understat.com/league/La_liga/[YEAR]"
+    Serie_A : "I1"    → "https://understat.com/league/Serie_A/[YEAR]"
+    Bundes  : "GB2"   → "https://understat.com/league/Bundesliga/[YEAR]"
+    Ligue1  : "FR1"   → "https://understat.com/league/Ligue_1/[YEAR]"
+}
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 1. 全景双驱数据扫描（重写：每个维度绑定搜索动作 → 填槽 → 标记口径/可信度）
+═══════════════════════════════════════════════════════════════════════════════
+
+[SCAN_1__BASELINE_XG_NPXG]
+  GOAL : "填 Home_npxG_For_Avg / Home_xGA_Avg / Away_... 以及 Last5 序列"
+  ACTION:
+    STEP_A: "开 Understat league表 → 找到两队行 → 抄 xG / xGA / npxG / MP"
+    SUCCESS_FILL:
+      Home_npxG_For_Avg = npxG / MP
+      Home_xGA_Avg     = xGA / MP
+      SRC_TAG = "UNDERSTAT"
+    FAIL:
+      IF only SofaScore single-match xG available → fill RAW_XG_DISPLAY_AVG
+          SRC_TAG = "SOFASCORE_DISPLAY [口径未公开·降级]"
+          FLAG = [XG_MODEL_MISMATCH]
+      ELSE → Home_npxG_For_Avg = UNKNOWN → FLAG = [NO_NPXG_HIST] → 走保守λ（同V16.2 §3.1-alt）
+
+[SCAN_2__XT_THREAT_ZSCORE]
+  GOAL : "回答：哪边创造更高质量机会？（序数）"
+  METHOD: "
+    实际可搜到的不是xT值·而是一组可观察代理：
+    - Understat team页逐场Shot列表 → 手工目测 shot zone分布（box vs outbox）
+    - SofaScore match页 Heatmap → 看进攻集中侧（左/右/中路）
+    - 控球% + 禁区内射门比（SofaScore可抄）
+  "
+  OUTPUT_FORMAT: "
+    xT_note = 'Home 威胁集中在右肋区(大量SofaScore热度) vs Away宽区低效'
+    Z_H_npxG_rel = (Home_npxG_For_Avg - league_avg_npxG) / league_std_npxG
+    Z_A_npxG_rel = (Away_npxG_For_Avg - league_avg_npxG) / league_std_npxG
+    ← Z-Score 只用 npxG 算（league_avg / league_std 从 Understat 表底部/手工算）
+    ← xT '值'本身不进λ
+  "
+  NOTES: "V15.1原文的'Z-Score对npxG和xT归一化'→修正为：Z-Score只对npxG做·xT降级为热力描述"
+
+[SCAN_3__PPDA_AND_STYLE]
+  GOAL : "标记 [战术绝对压制] / [高位压迫] / [低位大巴]"
+  METHOD:
+    TRY_1: "Understat team页 → 逐场列表 → 估算 PPDA ≈ 对方传球次数 / 防守动作次数（手工粗算）"
+    TRY_2: "SofaScore match页 → defensive_duels_won%+pressures → 序数标记 High/Med/Low"
+  FILL:
+    PPDA_est     = __ (UNK if fail)
+    Press_Label  = "High_PPDA<10" / "Medium" / "Low_PPDA>18" / UNK
+    Style_Tag    = [战术压制?] / [反击承受?] / UNK
+  FAIL:
+    PPDA_est = UNK → Style_Tag = UNK → Physics_Decay走默认 T_max=75（不装懂）
+
+[SCAN_4__INJURIES]
+  ;; 同 V16.2 Step_3 逻辑：TM页 → 估MinPct → Pos_Weight入表
+  ;; 五大联赛TM页质量极高（/verletztespieler/wettbewerb/GB1 等）
+  GOAL  : "确定 EP[DEF/ATT] 的加减项·但不偷偷×1.XX乘λ"
+  FILL  : "见 V16.2 §3 伤停修正格式（可复用）"
+
+[SCAN_5__ENVIRONMENT]
+  GOAL : "雨天/大风/场地/裁判出牌均值"
+  ACTION: "
+    搜: '[stadium] weather [kickoff_time] site:bbc.com/sport football'
+    搜: '[referee_name] cards per game site:transfermarkt.com referee' (可选)
+  "
+  FILL:
+    Env_Factor = 1.00 (雨→0.85 / 裁判严厉→0.95 / 正常→1.00)
+    Env_Src    = "URL_or_SEARCH_Q"
+    IF weather_data=UNK → Env_Factor=1.00 → FLAG [ENV_UNKNOWN→no_env_adjust]
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 2. 体能衰减 / 半全场剧本（同V17.0原逻辑·但PPDA_est驱动）
+═══════════════════════════════════════════════════════════════════════════════
+[PHYSICS_DECAY_MODEL_5LEAGUE]
+  ;
+  ; PPDA_est from SCAN_3:
+  ; - IF Press_Label = "High_PPDA<10" → T_max = 60-65min
+  ; - IF Press_Label = "Low_PPDA>18"  → T_max = 90min
+  ; - IF PPDA_est = UNK → T_max = 75min (neutral)
+  ;
+  ; 72h双赛判断 = 搜 "[team] next match after [date] site:understat.com / bbc sport fixture"
+  ;   → 看上一场出场time → <45min → [体能蓄力] else → [体能劣势·末段λ衰减]
+
+  HALF_TIME_LAMBDA_DECAY:
+    ; λ_H_1H = λ_base_H * 0.55 * (PPDA_factor)
+    ; λ_H_2H = λ_base_H * 0.45 * (if T_max<65 and no lead then extra_drop)
+    ; （仍是概算·但至少PPDA来源可查）
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 3. 战意动态权重（原V15.1场景ABCD保留·但积分/轮次必须搜出来不能拍）
+═══════════════════════════════════════════════════════════════════════════════
+[MOTIVATION_ENGINE_5LEAGUE]
+  ;
+  ; 必须先搜到积分榜行（SofaScore联赛页 / BBC Sport / Understat league表有pts+MP）
+  ; Base_M = (needed_pts / remaining_matches) * importance_coef
+  ;
+  ; 搜法: "[league] standings site:understat.com" 或 "site:bbc.com/sport/[league]/table"
+  ;
+  ; 若 standings 不可达 → Motivation = 1.0 (neutral) · FLAG [MOTIVATION_DATA_MISSING]
+  ;
+
+  SCENE_MOD:
+    - 生死战/保级: 1.0~1.5  ← needs: MP+GD+rivals_pts（搜得到）
+    - 德比/死敌:    1.2      ← 知识型标记·可存档
+    - 杯赛/轮换:    0.3~0.8  ← 需要搜 confirmed_lineup（赛前60min）
+    - 已出线:       0.4      ← 同上
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 4. 资金流向与机构博弈（诚实降格版 —— 这是V15.1最该改的一段）
+═══════════════════════════════════════════════════════════════════════════════
+[MARKET_INTELLIGENCE_5LEAGUE__SEARCH_COMPATIBLE]
+
+  ;; 必发/大户成交量 = 不公开 → 直说
+  VOLUME_DATA_STATUS = "UNAVAILABLE (Betfair/Betdaq API 需账号/付费·搜不到散户/大户拆分)"
+
+  ;; 因此 SMF 只能做三件事（都是公开可见的）：
+  SMF_OBSERVABLES:
+    A_ODDS_DRIFT  = "初赔→现赔方向（搜OddsPortal快照记录）"
+    B_LINE_CHANGE = "盘口升降（ex: -1.5 → -1.25 → -1.0 = 退盘 / -1.5 → -1.75 = 升盘深开）"
+    C_PRICE_DEPTH = "看OddsPortal对比多家：如果主流都在同一侧升水=机构不惧→[热无防洪]"
+    D_NEWS_CONTEXT = "搜: '[team] injury key player + odds drop' → 区分 '真热=伤病驱动' vs '名气热'"
+
+  DECISION_TREE:
+    ;
+    ; True_Overheat（降级定义）:
+    ;   条件: H_odds ≤ 1.35 AND 盘口退盘(降威慑) AND 无key_player_out_confirmed
+    ;   动作: [大热正路·但无暗池验证] → 标记 [HOT_UNVERIFIED] → 只做"防冷备选"不重仓反向
+    ;
+    ; False_Heat / 诱盘:
+    ;   条件: H_odds 浅(1.60~2.10) AND 升盘+强水 且 基本面有 hidden flaw(伤停/PPDA mismatch搜得到)
+    ;   动作: 顺势
+    ;
+    ; Balanced:
+    ;   条件: 盘口稳·赔率匹配模型implied
+    ;   动作: 回归λ基本面
+    ;
+
+  EDGE_RULE:
+    "Edge = (Poisson_Prob - Market_Implied_Prob) 必须 > 5% 且
+     [XG_MODEL_MISMATCH] ≠ TRUE 且
+     SLOT_INTEGRITY_PASS = ALL_SRC_TAGGED
+     → 否则 Edge 作废（UNK数据源算出的Edge是自欺）"
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 5. 输出决策表（V15.2：强制带SRC_TAG + 口径 + UNK处置）
+═══════════════════════════════════════════════════════════════════════════════
+| 对阵 | 联赛 | λ_H/λ_A(mode) | xG口径 | PPDA_src | EPV | 资金形态 | Edge | 方向 | 进球区间 | HT/FT | 风险 |
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+| ____ vs ____ | __ | __ (POINT/RANGE?) | UNDERSTAT_npxG✓ / DISPLAY⚠ / UNK✗ | Understat✓/UNK | [CLEAN/⚠CORE_CB_OUT] | SHAPE_ONLY·HOT_UNVERIFIED | __%(if valid) | __ | __ | __ | __ |
+
+; 若 λ_mode=RANGE → 风险一律+1档（UNK扩散性）
+; 若 xG口径=DISPLAY或UNK → 战术胜负手栏加⚠前缀
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 6. 风控自检（正文规则的出场勾选 · 不新增判罚）
+═══════════════════════════════════════════════════════════════════════════════
+; 来源：原1 RISK_CHECKLIST_5LEAGUE
+; 噪点约束：下列各项已在上文 SCAN / EDGE_RULE / Physics / ANTI_NOISE 写过；此处只做「落表前打勾」。
+; 禁止：因勾选失败再叠加第二次扣分/二次作废；禁止为躲小胜垄断而无证据升大胜。
+; 与主控 V17.3 对齐：勾完本单后，方向/净胜档/比分仍须过 SCORE_PICK（先定方向；破默认1-1；平局≠胶着；禁止不败）。
+
+[RISK_CHECKLIST_5LEAGUE]
+  [ ] 1. SRC_TAG 全覆盖? （每个数有来源·无一格是"我记得≈1.2"）
+  [ ] 2. XG_MODEL_DISCREPANCY? （混用口径=停·回§0-B仲裁）
+  [ ] 3. PPDA_est = UNK? → T_max 走 neutral 75min（不装懂）
+  [ ] 4. MinPct 可证? （TM页Apps截图/新闻首发核对·不靠"他肯定是主力"）
+  [ ] 5. Motivation 积分行搜到了? （不从脑子背·从standings抄）
+  [ ] 6. Edge>5% 但 xG口径=DISPLAY/UNK → 打× → Edge_DISQUALIFIED
+  [ ] 7. 半全场自洽? （PPDA→T_max→衰减→HT/FT走向 逻辑链不断裂）
+  [ ] 8. SCORE_PICK 已过? （先定方向；主+次+防三档齐全；主次同向；有优势则比分主=胜负球非1-1；无「不败」）
+  [ ] 9. TRUE_00 / BLOWOUT / 净胜档? （双残优先闷平；≥3仅中胜；大胜须≥4或含深盘；缺阵已降档；主比分匹配净胜档）
+  [ ] 10. GOAL_FROM_SCORE? （先进球区间不预填；主、次总球数均落在区间内；冲突只扩区间）
+
+; ===== EOF =====
