@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# 把仓库根目录框架文件同步进 skills/.../references 与 .cursor/skills
+# 同步框架到 skills/.../references（供 GitHub / npx skills add）
+# 默认不安装到本机 ~/.cursor/skills
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REF="$ROOT/skills/football-predict-v17/references"
-CUR="$ROOT/.cursor/skills/football-predict-v17"
 
-mkdir -p "$REF" "$CUR"
+mkdir -p "$REF"
 
 FILES=(
   外部模型启动卡.txt
@@ -29,13 +29,14 @@ for f in "${FILES[@]}"; do
   cp "$ROOT/$f" "$REF/$f"
 done
 
-cp "$ROOT/skills/football-predict-v17/SKILL.md" "$CUR/SKILL.md"
-cp "$ROOT/skills/football-predict-v17/output-template.md" "$CUR/output-template.md"
-
-# 可选：同步到本机 Cursor / 上级 AQQ（失败忽略）
-mkdir -p "$HOME/.cursor/skills/football-predict-v17" 2>/dev/null || true
-cp "$CUR/SKILL.md" "$CUR/output-template.md" "$HOME/.cursor/skills/football-predict-v17/" 2>/dev/null || true
-mkdir -p "$ROOT/../.cursor/skills/football-predict-v17" 2>/dev/null || true
-cp "$CUR/SKILL.md" "$CUR/output-template.md" "$ROOT/../.cursor/skills/football-predict-v17/" 2>/dev/null || true
-
-echo "OK synced → $REF and $CUR"
+# 仅当显式传 --local-cursor 才装到本机（默认不装）
+if [[ "${1:-}" == "--local-cursor" ]]; then
+  CUR="$ROOT/.cursor/skills/football-predict-v17"
+  mkdir -p "$CUR" "$HOME/.cursor/skills/football-predict-v17"
+  cp "$ROOT/skills/football-predict-v17/SKILL.md" "$CUR/"
+  cp "$ROOT/skills/football-predict-v17/output-template.md" "$CUR/"
+  cp "$CUR/SKILL.md" "$CUR/output-template.md" "$HOME/.cursor/skills/football-predict-v17/"
+  echo "OK synced → $REF + local Cursor ($CUR)"
+else
+  echo "OK synced → $REF（未安装本机 Cursor；需要时加 --local-cursor）"
+fi

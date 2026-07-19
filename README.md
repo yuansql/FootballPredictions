@@ -1,6 +1,8 @@
 # FootballPredictions · 2足球框架 V17.4.2
 
-体彩/竞彩足球预测框架 + Cursor / Agent Skill。支持强制取证、RAW 假 Edge 闸、出票星级。
+体彩/竞彩足球预测框架 + 可分发 Agent Skill。
+
+**完整用法（含 `sync-skill-bundle.sh` 说明）→ [使用.md](./使用.md)**
 
 仓库：https://github.com/yuansql/FootballPredictions
 
@@ -30,14 +32,22 @@ git clone https://github.com/yuansql/FootballPredictions.git
 cd FootballPredictions
 ```
 
-- Cursor：打开该文件夹为工作区，或 `@football-predict-v17`
-- 项目内已有：`skills/football-predict-v17/` 与 `.cursor/skills/football-predict-v17/`
+- Cursor：克隆后用 `@` 引用 `skills/football-predict-v17`，或自行复制到 `~/.cursor/skills`（可选，非必须）
+- 项目内分发入口：`skills/football-predict-v17/`（框架在 `references/`）
 
-复制到个人 Cursor skills：
+复制到个人 Cursor skills（可选；作者本机默认不装）：
 
 ```bash
 mkdir -p ~/.cursor/skills/football-predict-v17
-cp -R skills/football-predict-v17/* ~/.cursor/skills/football-predict-v17/
+cp -R skills/football-predict-v17/SKILL.md skills/football-predict-v17/output-template.md ~/.cursor/skills/football-predict-v17/
+# 框架在 references/，保持与 SKILL 同级目录结构：
+cp -R skills/football-predict-v17/references ~/.cursor/skills/football-predict-v17/
+```
+
+卸载本机 Cursor skill：
+
+```bash
+rm -rf ~/.cursor/skills/football-predict-v17
 ```
 
 ### 方式 C · 只给千问 / DeepSeek
@@ -57,18 +67,16 @@ openskills install yuansql/FootballPredictions
 
 ```text
 FootballPredictions/
+├── 使用.md                            ← 完整使用说明
 ├── README.md
+├── scripts/
+│   └── sync-skill-bundle.sh           ← 源文件同步到 references
 ├── skills/
-│   └── football-predict-v17/          ← npx skills 发现入口
+│   └── football-predict-v17/
 │       ├── SKILL.md
 │       ├── output-template.md
-│       └── references/                ← 框架全文（便携 ROOT）
-│           ├── 球赛预测框架.txt
-│           ├── 外部模型启动卡.txt
-│           ├── …
-│           └── 一键投喂_全量合并.txt
-├── .cursor/skills/football-predict-v17/  ← Cursor 项目 skill
-└── *.txt                              ← 开发用源文件（与 references 同步）
+│       └── references/                ← 框架副本（供别人安装）
+└── *.txt                              ← 开发用源文件
 ```
 
 ---
@@ -79,7 +87,8 @@ FootballPredictions/
 
 ```bash
 python3 rebuild_一键投喂.py
-./scripts/sync-skill-bundle.sh   # 同步到 skills/.../references 与 .cursor/skills
+bash scripts/sync-skill-bundle.sh   # 只同步 skills/.../references，不装本机
+# 若要临时装本机：bash scripts/sync-skill-bundle.sh --local-cursor
 git add -A && git commit -m "…" && git push
 ```
 
