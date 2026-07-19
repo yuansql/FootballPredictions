@@ -1,6 +1,6 @@
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                                                                              ║
-║  【足球赛事预测全维闭环量化模型 V16.2】                                       ║
+║  【足球赛事预测全维闭环量化模型 V16.3】                                       ║
 ║  （OSINT取证架构 · 反虚构λ值 · Early_Vuln通用标记版 · 搜索链路硬化版）         ║
 ║                                                                              ║
 ║  基于 V16.1 优化 — 核心变更：                                                 ║
@@ -9,6 +9,9 @@
 ║  ③ SEARCH_PROTOCOL 每一步显式写出 Search_Q / Parse_Field / Fallback        ║
 ║  ④ 新增 SOURCE_TRUST 评级（★/☆/✗）和 FAIL_PATH（弃权>编造）                 ║
 ║  ⑤ 新增 NO_NPXG_HIST 分支（国家队/非覆盖联赛·禁止用弱池零封冒充xGA）         ║
+║  基于 V16.2 优化 — V16.3 追加（2026-07-19 复盘）：                            ║
+║  ⑥ [ANTI_FALSE_EDGE] RAW_GOALS λ回归+Edge打折+8%闸；禁假高精度客胜            ║
+║  ⑦ 与主控 V17.4 对齐：同轮 Tier3 同构剧本最多 1 场可介入                        ║
 ║  核心理念不变：每参数必须搜索可得；若无数据=UNKNOWN/弃权；严禁虚构平滑λ值。  ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
@@ -290,6 +293,20 @@ SLOT_INTEGRITY_CHECK:
   ; λ_H_range = [ λ_base_H * 0.85 , λ_base_H * 1.60 ]
   ; λ_A_range = [ λ_base_A * 0.70 , λ_base_A * 1.40 ]  (上限受POOL_UNTRUSTED压制)
 
+  ; ---- 3.5-b FALSE_EDGE（RAW_GOALS 强制 · 与主控 V17.4 同文）----
+  ; ★ 触发看口径不看 Tier：韩K(Tier2)/芬超(Tier3) 凡 RAW_GOALS → 同一套
+  ; 1) LG_HALF = 联赛场均总球/2（芬超≈1.30 挪超≈1.45 瑞超≈1.40 韩K≈1.15，写明来源）
+  ; 2) λ'_side = 0.65 * λ_side + 0.35 * LG_HALF   ← 禁止跳过回归直接泊松
+  ; 3) 用 λ' 算 P_H/D/A → Edge_raw = p_model − p_fair
+  ; 4) Edge_eff = Edge_raw * 0.60
+  ;    若主或客「主场/客场拆分」样本 < 6 场：Edge_eff *= 0.85
+  ; 5) 可介入仅当 Edge_eff ≥ 8%（禁止只用 Edge_raw≥5% 放行）
+  ; 6) Edge_raw≥12% 且方向与 p_fair 热门对打：
+  ;      需 ≥2 条非λ证据（近3 H2H同向 / 对手核心OUT有URL / 休息差≥2）
+  ;      否则 NO_ACTION 原因=FALSE_EDGE_MKT_CONFLICT
+  ; 7) 同轮同构「客胜+小胜+1或3球」类：最多 1 场可介入，其余 TEMPLATE_STACK
+  ; MARK 决策表：Edge_raw / Edge_eff / λ' / FALSE_EDGE=Y
+
   ; ---- 3.6 EPV（同V16.1·只读·不乘λ） ----
   ; ---- 3.7 Env_Factor ----
   ; ---- 3.8 Poisson matrix ----
@@ -298,9 +315,9 @@ SLOT_INTEGRITY_CHECK:
 ═══════════════════════════════════════════════════════════════════════════════
 ■ 4. 输出决策表（V16.2：加 SRC 列 + 置信度 + 口径）
 ═══════════════════════════════════════════════════════════════════════════════
-| 对阵 | λ_H / λ_A (mode) | xG口径 | ⚠EPV | 数据源可信度 | 市场 | Edge | 方向 | 进球区间 | 风险 |
+| 对阵 | λ_H / λ_A (mode) | xG口径 | ⚠EPV | 数据源可信度 | 市场 | Edge_raw/eff | 方向 | 进球区间 | 风险 |
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
-| ____ vs ____ | λ_H=__.__ (__range?) | UNDERSTAT_npxG ✅ / RAW_GOALS_FALLBACK ⚠ | [CLEAN/⚠CORE_CB_OUT] | ★★★/★★☆/✗UNK | 1.08/22/65 | __ | [ ] | __ | 高(UNKλ) |
+| ____ vs ____ | λ= / λ'= (__range?) | UNDERSTAT_npxG ✅ / RAW_GOALS_FALLBACK ⚠ | [CLEAN/⚠CORE_CB_OUT] | ★★★/★★☆/✗UNK | 1.08/22/65 | __/__ | [ ] | __ | 高(UNKλ)|FALSE_EDGE |
 
 ; mode栏写: "POINT" 或 "RANGE(LOW/HIGH)·NO_NPXG"
 

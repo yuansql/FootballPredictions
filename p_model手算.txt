@@ -95,12 +95,20 @@ P_A = 所有 k < j 的格子之和     （客胜）
 方向=胶着 → 不算 Edge（N/A）
 
 p_fair = 胜平负 SP 乘法去水后，同方向那一项
-Edge   = p_model − p_fair
-Edge ≥ 5% → 可介入；否则弃单
+Edge_raw = p_model − p_fair
 ```
 
+**分口径闸门（与主控 V17.4 对齐）：**
+| λ 口径 | 计算 | 可介入 |
+|--------|------|--------|
+| Understat npxG 等可信 | Edge_eff = Edge_raw | Edge_eff ≥ **5%** |
+| RAW_GOALS / NO_NPXG（**不限层级**：Tier3 及 Tier2 韩K/葡超等无 Understat） | ① λ'=0.65λ+0.35·LG_HALF 重算 p_model<br>② Edge_eff = Edge_raw×0.60（样本&lt;6场再×0.85） | Edge_eff ≥ **8%** |
+
+另：Edge_raw≥12% 且方向与市场热门对打 → 无≥2条非λ证据则**弃单**（FALSE_EDGE_MKT_CONFLICT）。  
+同轮 Tier3「客胜小胜+1或3」同构最多荐 **1** 场（TEMPLATE_STACK）。
+
 落表一行示例：
-`λ_H=1.50 λ_A=1.00 | P_H/D/A=0.51/0.25/0.24 | p_model=0.51 | p_fair=0.44 | Edge=+7%`
+`口径=RAW λ→λ' | P_H/D/A=… | p_model=… | p_fair=… | Edge_raw=+12% Edge_eff=+6.1% → 弃单(<8%)`
 
 ──────────────────────────────────────────────────────────────────────────────
 ■ 6. 手算示范（请按此格式自算）
@@ -155,11 +163,13 @@ V17 写 Tier3 可用负二项——**手算 p_model 一律用本节独立泊松�
 [ ] 已填 6×6 或等价加总得到 P_H/P_D/P_A  
 [ ] p_model 与框架方向一致  
 [ ] SP → p_fair（乘法去水）已算  
-[ ] Edge = p_model − p_fair 已写百分比  
+[ ] Edge_raw / Edge_eff 已写；口径已标 npxG 或 RAW_GOALS
+[ ] RAW_GOALS 已做 λ→λ' 回归与 ×0.60 打折；闸门按 5% 或 8% 对口径执行
+[ ] 未触犯 MKT_CONFLICT / TEMPLATE_STACK（或已写豁免证据）
 
 任一勾不上 → 本场 p_model/Edge 无效 → 弃单。
 
 ; End of p_model hand calc
-; 版本：V1.0
-; 日期：2026-07-18
+; 版本：V1.1（对齐 V17.4 假Edge）
+; 日期：2026-07-19
 ;
