@@ -301,7 +301,7 @@ SLOT_INTEGRITY_CHECK:
   ; 3) 用 λ' 算 P_H/D/A → Edge_raw = p_model − p_fair
   ; 4) Edge_eff = Edge_raw * 0.60
   ;    若主或客「主场/客场拆分」样本 < 6 场：Edge_eff *= 0.85
-  ; 5) 可介入仅当 Edge_eff ≥ 3%（禁止只用 Edge_raw≥5% 放行）
+  ; 5) 双闸：胜平负 Edge_eff≥1%；让球/进球≥3%（禁止只用 Edge_raw≥5% 放行）
   ; 6) Edge_raw≥12% 且方向与 p_fair 热门对打：
   ;      需 ≥2 条非λ证据（近3 H2H同向 / 对手核心OUT有URL / 休息差≥2）
   ;      否则 NO_ACTION 原因=FALSE_EDGE_MKT_CONFLICT

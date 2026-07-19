@@ -152,7 +152,7 @@
 
 [NO_ACTION · 弃单出口]（合法结果，不是偷懒）
 落表前先过弃单闸，满足任一 → 【出票】=不荐（禁止主推玩法/串关/仓位>0）：
-  · 有效 Edge 未过闸：npxG 口径 Edge_eff=Edge_raw≥3%；RAW_GOALS/NO_NPXG 须先按主控 [ANTI_FALSE_EDGE] 得 Edge_eff≥3%
+  · 有效 Edge 未过闸：npxG 时胜平负≥1%/子盘≥3%；RAW 须先 [ANTI_FALSE_EDGE] 再按双闸门判定
   · [FORCE_SEARCH] 取证不足（关键槽有源<2 或无【取证清单】）→ 出票不荐
   · SP 三项拿不到（用户未给且官网查无）→ 市场侧算不出
   · p_model 算不出（无 λ 或未按 `p_model手算.txt` 加总出 P_H/D/A）→ 直接弃单，禁止编胜率

@@ -1,4 +1,4 @@
-# FootballPredictions · 2足球框架 V17.4.2
+# FootballPredictions · 2足球框架 V17.4.5
 
 体彩/竞彩足球预测框架 + 可分发 Agent Skill。
 
