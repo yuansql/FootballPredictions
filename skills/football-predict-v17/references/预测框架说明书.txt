@@ -2,8 +2,8 @@
 ║                                                                              ║
 ║   【五文件协同作战 · 实盘使用说明书】                                          ║
 ║                                                                              ║
-║   核心逻辑：V17.4.2 是“大脑”，其余文件是“器官”。                              ║
-║   使用原则：平时只看主控 V17.4.2，遇到疑难杂症翻对应器官。                      ║
+║   核心逻辑：V17.4.4 是“大脑”，其余文件是“器官”。                              ║
+║   使用原则：平时只看主控 V17.4.4，遇到疑难杂症翻对应器官。                      ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
@@ -11,13 +11,13 @@
 ■ 第一部分：文件职能与定位（谁负责什么？）
 ═══════════════════════════════════════════════════════════════════════════════
 
-[主控制器] 球赛预测框架.txt (V17.4.2)
+[主控制器] 球赛预测框架.txt (V17.4.4)
   - 地位：总指挥、最终裁决者。
   - 功能：
     1. 判定联赛层级（Tier 1-4）。
     2. 分配权重（战意、EPV、资金）。
     3. 顺序：方向→净胜档→主/次/防→进球区间（区间由主/次总球推导）；输出最终决策表。
-    4. V17.4：RAW_GOALS 假Edge；V17.4.1：【投注星级】；V17.4.2：【强制取证清单】无URL不得可介入。
+    4. V17.4：RAW_GOALS 假Edge；V17.4.1：【投注星级】；V17.4.4：【强制取证清单】无URL不得可介入。
   - 何时用：每一场比赛都必须从这里开始，也在这里结束。
 
 [通用底盘] 初始框架.txt (V13.3)
@@ -72,7 +72,7 @@
                或北单 https://www.bjlot.com.cn/ssm/dc200_spf.shtml
                （用户已粘贴三项 SP 则可不开）
 
-【Step 1】赛前：定性与取证（V17.4.2 + 必要时 V16.3）
+【Step 1】赛前：定性与取证（V17.4.4 + 必要时 V16.3）
   ├── 联赛分层（瑞典超=Tier 3）
   ├── **强制【取证清单】**：积分/主客或近5/伤停/xG或NO_NPXG/SP — 每槽 SOURCE_URL 或 SEARCH_Q 或 UNKNOWN
   ├── 核对近5场进球/失球、伤停、盘口（无npxG则进攻差用近5场进球差）
@@ -94,7 +94,7 @@
   ├── p_model：严格按 `p_model手算.txt`（λ→泊松0～5表→P_H/D/A→方向项）
   │         算不出 λ/加总 → 弃单；禁止口头编胜率
   ├── RAW_GOALS/Tier3：λ'=0.65λ+0.35·LG_HALF → Edge_eff=Edge_raw×0.60（小样本×0.85）
-  │         闸门 Edge_eff≥8%；npxG 仍 Edge_raw≥5%
+  │         闸门 Edge_eff≥3%；npxG 仍 Edge_raw≥5%
   ├── 假Edge对打热门无非λ证据→弃单；同轮同构客胜小胜最多1场
   ├── 无成交量 → SHAPE_ONLY；OddsPortal 不进 Edge 主公式
   └── 未弃单才继续：方向→净胜档→比分→区间（禁止默认 1-1）
@@ -163,15 +163,15 @@
    - 精简入口：`外部模型启动卡.txt` + 按联赛 3～5 个分文件
    - 判定是否执行：看输出有无【取证清单】【硬闸自检】【出票】【投注星级】；无则废稿。
 
-5. Cursor / GitHub skill（改完跑 `bash scripts/sync-skill-bundle.sh` 再 push）：
-   - 分发入口：`skills/football-predict-v17/`（含 `references/` 框架全文）
-   - 他人安装：`npx skills add yuansql/FootballPredictions --skill football-predict-v17`
-   - 仓库：https://github.com/yuansql/FootballPredictions
-   - 本地 Cursor：`.cursor/skills/football-predict-v17/`（由 sync 脚本更新）
+5. GitHub skill（分发用；本机默认不安装）：
+   - 入口：`skills/football-predict-v17/`（含 `references/`）
+   - 他人：`npx skills add yuansql/FootballPredictions --skill football-predict-v17`
+   - 维护同步：`bash scripts/sync-skill-bundle.sh`（只更新 references）
+   - 若自己要装本机 Cursor：再加 `--local-cursor`；卸载：删 `~/.cursor/skills/football-predict-v17`
 
 ;
 ; End of Instruction Manual
 ; 版本：V1.4
 ; 日期：2026-07-19
-; 变更：对齐 V17.4.2；强制取证；说明书抬头修正；一致性核对修补
+; 变更：对齐 V17.4.4；强制取证；说明书抬头修正；一致性核对修补
 ;

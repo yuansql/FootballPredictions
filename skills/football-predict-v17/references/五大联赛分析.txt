@@ -224,10 +224,10 @@ UNDERSTAT_CODES = {
     ;
 
   EDGE_RULE:
-    "Edge_raw = p_model - p_fair（乘法去水）；五大有 Understat 时 Edge_eff=Edge_raw，闸门 ≥ 5%。
+    "Edge_raw = p_model - p_fair（乘法去水）；五大有 Understat 时 Edge_eff=Edge_raw，闸门 ≥ 3%。
      另须 [FORCE_SEARCH] 关键槽有源≥2，且 [XG_MODEL_MISMATCH] ≠ TRUE，且 SLOT 全打 SRC_TAG。
      口径=DISPLAY/UNK 算出的 Edge → 作废（Edge_DISQUALIFIED），不得可介入。
-     冲突时以主控 V17.4.2 为准。"
+     冲突时以主控 V17.4.3 为准。"
 
 ═══════════════════════════════════════════════════════════════════════════════
 ■ 5. 输出决策表（V15.2：强制带SRC_TAG + 口径 + UNK处置）
@@ -245,7 +245,7 @@ UNDERSTAT_CODES = {
 ; 来源：原1 RISK_CHECKLIST_5LEAGUE
 ; 噪点约束：下列各项已在上文 SCAN / EDGE_RULE / Physics / ANTI_NOISE 写过；此处只做「落表前打勾」。
 ; 禁止：因勾选失败再叠加第二次扣分/二次作废；禁止为躲小胜垄断而无证据升大胜。
-; 与主控 V17.4.2 对齐：勾完本单后，须有【取证清单】；方向/净胜档/比分仍须过 SCORE_PICK。
+; 与主控 V17.4.3 对齐：勾完本单后，须有【取证清单】；方向/净胜档/比分仍须过 SCORE_PICK。
 
 [RISK_CHECKLIST_5LEAGUE]
   [ ] 1. SRC_TAG 全覆盖? （每个数有来源·无一格是"我记得≈1.2"）
@@ -253,7 +253,7 @@ UNDERSTAT_CODES = {
   [ ] 3. PPDA_est = UNK? → T_max 走 neutral 75min（不装懂）
   [ ] 4. MinPct 可证? （TM页Apps截图/新闻首发核对·不靠"他肯定是主力"）
   [ ] 5. Motivation 积分行搜到了? （不从脑子背·从standings抄）
-  [ ] 6. Edge_eff≥5%（npxG）但 xG口径=DISPLAY/UNK → 打× → Edge_DISQUALIFIED
+  [ ] 6. Edge_eff≥3%（npxG）但 xG口径=DISPLAY/UNK → 打× → Edge_DISQUALIFIED
   [ ] 7. 【取证清单】已填；关键槽有源≥2（否则出票不荐）
   [ ] 7. 半全场自洽? （PPDA→T_max→衰减→HT/FT走向 逻辑链不断裂）
   [ ] 8. SCORE_PICK 已过? （先定方向；主+次+防三档齐全；主次同向；有优势则比分主=胜负球非1-1；无「不败」）

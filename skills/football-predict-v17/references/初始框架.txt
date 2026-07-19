@@ -43,10 +43,10 @@
 2. 风格核查：风格是否克制？（高位压迫 vs 反击）
 3. 防诱核查：赔率是否支持？（资金流向是否符合盘口）
 4. 概率溢价：对比市场隐含概率与模型胜率，算 Edge_raw 后再按主控得 Edge_eff。
-   · npxG：Edge_eff=Edge_raw ≥ 5% 才可介入
-   · RAW_GOALS/NO_NPXG：须 λ′ 后重算，Edge_eff=Edge_raw×0.60（小样本再×0.85）≥ 8%
+   · npxG：Edge_eff=Edge_raw ≥ 3% 才可介入
+   · RAW_GOALS/NO_NPXG：须 λ′ 后重算，Edge_eff=Edge_raw×0.60（小样本再×0.85）≥ 3%
    · 另须满足 [FORCE_SEARCH] 关键槽有源≥2；否则即使 Edge 好看也不出票
-   （旧文「>5%」已废止，一律以主控 V17.4.2 为准）
+   （旧文「>5%」已废止，一律以主控 V17.4.3 为准）
 
 [DIRECTION_FIRST · 落表强制顺序]
 顺序强制（不可颠倒）：
@@ -152,13 +152,13 @@
 
 [NO_ACTION · 弃单出口]（合法结果，不是偷懒）
 落表前先过弃单闸，满足任一 → 【出票】=不荐（禁止主推玩法/串关/仓位>0）：
-  · 有效 Edge 未过闸：npxG 口径 Edge_eff=Edge_raw≥5%；RAW_GOALS/NO_NPXG 须先按主控 [ANTI_FALSE_EDGE] 得 Edge_eff≥8%
+  · 有效 Edge 未过闸：npxG 口径 Edge_eff=Edge_raw≥3%；RAW_GOALS/NO_NPXG 须先按主控 [ANTI_FALSE_EDGE] 得 Edge_eff≥3%
   · [FORCE_SEARCH] 取证不足（关键槽有源<2 或无【取证清单】）→ 出票不荐
   · SP 三项拿不到（用户未给且官网查无）→ 市场侧算不出
   · p_model 算不出（无 λ 或未按 `p_model手算.txt` 加总出 P_H/D/A）→ 直接弃单，禁止编胜率
   · 关键数字大面积无法核实（进攻差+失球+伤停 UNK）
   · 方向与净胜档证据互相打架且无法用 FIREPOWER_OVER_COOL / 战意仲裁
-  · FALSE_EDGE_MKT_CONFLICT / TEMPLATE_STACK（见主控 V17.4.2）
+  · FALSE_EDGE_MKT_CONFLICT / TEMPLATE_STACK（见主控 V17.4.3）
 SP 来源：用户给了用用户的；否则体彩/北单官网胜平负三项；下单用**停售前可买 SP**；不用 OddsPortal 作 Edge 主源。
 ★ 不荐仍须给【结果预测】（方向·净胜档·主/次/防）；【投注星级】=☆☆☆☆☆；见主控 [STAR_RATING]。
 弃单时决策表：出票=不荐｜星级=0｜结果预测=仍填写｜原因一条。
