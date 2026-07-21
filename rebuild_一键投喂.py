@@ -8,6 +8,7 @@ root = Path(__file__).resolve().parent
 parts = [
     ("00_强制硬闸", "外部模型启动卡.txt", "ALWAYS · 最高优先级 · 先读完再往下"),
     ("01_主控", "球赛预测框架.txt", "ALWAYS · 每场必用"),
+    ("01b_V15.6补丁", "rules/V15.6_patches.txt", "ALWAYS · 五补丁永久挂载；与主控 [V15.6_PATCHES] 同文"),
     ("02_底盘", "初始框架.txt", "ALWAYS · 方向/BLOWOUT/禁默认1-1"),
     ("03_手算", "p_model手算.txt", "ALWAYS · 算 Edge 前必用"),
     ("04_出票人设", "投注分析专家_人设提示词.txt", "ALWAYS · 出票格式/星级"),

@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REF="$ROOT/skills/football-predict-v17/references"
 
-mkdir -p "$REF"
+mkdir -p "$REF" "$REF/rules"
 
 FILES=(
   外部模型启动卡.txt
@@ -29,14 +29,21 @@ for f in "${FILES[@]}"; do
   cp "$ROOT/$f" "$REF/$f"
 done
 
+# V15.6 补丁（可执行 + 规范）
+cp "$ROOT/rules/V15.6_patches.py" "$REF/rules/"
+cp "$ROOT/rules/V15.6_patches.txt" "$REF/rules/"
+cp "$ROOT/rules/__init__.py" "$REF/rules/"
+
 # 仅当显式传 --local-cursor 才装到本机（默认不装）
 if [[ "${1:-}" == "--local-cursor" ]]; then
   CUR="$ROOT/.cursor/skills/football-predict-v17"
   mkdir -p "$CUR" "$HOME/.cursor/skills/football-predict-v17"
   cp "$ROOT/skills/football-predict-v17/SKILL.md" "$CUR/"
   cp "$ROOT/skills/football-predict-v17/output-template.md" "$CUR/"
+  cp -R "$REF" "$CUR/"
   cp "$CUR/SKILL.md" "$CUR/output-template.md" "$HOME/.cursor/skills/football-predict-v17/"
+  cp -R "$REF" "$HOME/.cursor/skills/football-predict-v17/"
   echo "OK synced → $REF + local Cursor ($CUR)"
 else
-  echo "OK synced → $REF（未安装本机 Cursor；需要时加 --local-cursor）"
+  echo "OK synced → $REF（含 rules/；未安装本机 Cursor；需要时加 --local-cursor）"
 fi

@@ -1,6 +1,7 @@
-# FootballPredictions · 2足球框架 V17.4.5
+# FootballPredictions · 2足球框架 V17.4.6
 
-体彩/竞彩足球预测框架 + 可分发 Agent Skill。
+体彩/竞彩足球预测框架 + 可分发 Agent Skill。  
+**V17.4.6**：双闸门 + 降维 + **V15.6 五补丁**（Kryptonite / Zombie / Jinx / Edge_Refine / StarFactor）。
 
 **完整用法（含 `sync-skill-bundle.sh` 说明）→ [使用.md](./使用.md)**
 
@@ -23,7 +24,7 @@ npx skills add yuansql/FootballPredictions --skill football-predict-v17 -g
 ```
 
 安装后 skill 在 `.agents/skills/football-predict-v17/`（或全局目录）。  
-框架正文在 skill 内 **`references/`**，Agent 按 `SKILL.md` 解析 `ROOT`。
+框架正文在 skill 内 **`references/`**，补丁在 **`rules/`**（同步进 references/rules），Agent 按 `SKILL.md` 解析 `ROOT`。
 
 ### 方式 B · Git 克隆整仓
 
@@ -69,13 +70,16 @@ openskills install yuansql/FootballPredictions
 FootballPredictions/
 ├── 使用.md                            ← 完整使用说明
 ├── README.md
+├── rules/
+│   ├── V15.6_patches.py               ← 可执行五补丁
+│   └── V15.6_patches.txt              ← 补丁规范（Agent 可读）
 ├── scripts/
 │   └── sync-skill-bundle.sh           ← 源文件同步到 references
 ├── skills/
 │   └── football-predict-v17/
 │       ├── SKILL.md
 │       ├── output-template.md
-│       └── references/                ← 框架副本（供别人安装）
+│       └── references/                ← 框架副本（含 rules/）
 └── *.txt                              ← 开发用源文件
 ```
 
