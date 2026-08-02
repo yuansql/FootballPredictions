@@ -92,8 +92,9 @@ S = p_raw_H + p_raw_D + p_raw_A          （常 >1，多出部分=抽水）
 p_fair_i = p_raw_i / S                   （三项之和=1）
 取框架方向对应的 p_fair（主胜→H，平→D，客→A）
 Edge_raw = p_model − p_fair
-· npxG 可信：Edge_eff = Edge_raw ≥ 3% → 可介入（出票通道=胜平负）
-· RAW_GOALS/Tier3：λ'=0.65λ+0.35·LG_HALF 后重算 → Edge_eff = Edge_raw×0.60（小样本再×0.85）≥ 3%
+· 双闸门（V17.4.6 真源）：胜平负 Edge_eff ≥ **1%** → 出票通道=胜平负；让球/进球 ≥ **3%**（≥5% 宜单关高推）
+· npxG 可信：Edge_eff = Edge_raw（胜平负闸=1%，勿再用旧 3% 单闸）
+· RAW_GOALS/Tier3：λ'=0.65λ+0.35·LG_HALF 后重算 → Edge_eff = Edge_raw×0.60（小样本再×0.85）；仍按双闸判定
 · 胜平负 Edge_eff<1% 且未硬弃单 → **必须**跑 [DIM_REDUCTION]：让球三项(≥3%) → 总进球/大小；公式见 `p_model手算.txt` §5b
 · 降维过闸：出票通道=让球|进球数，星级封顶★★★☆☆，主推须写「胜平负未过闸·降维」
 · Edge_raw≥12% 且与市场热门对打、无≥2条非λ证据 → 弃单（FALSE_EDGE_MKT_CONFLICT）
