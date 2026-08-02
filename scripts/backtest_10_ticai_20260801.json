@@ -1,0 +1,476 @@
+{
+  "summary": {
+    "slate": "竞彩 2026-08-01 001–010",
+    "n": 10,
+    "dir_hit": 6,
+    "dir_acc": 0.6,
+    "ticket_n": 0,
+    "ticket_hit": 0,
+    "ticket_acc": null,
+    "market_upset_n": 5,
+    "intel_saved_on_upset": 1,
+    "skill": "football-predict-v17 / V17.4.7 INTEL_FIRST",
+    "disclaimer": "澳客指数模拟；非投资建议；λ为赛前点估计"
+  },
+  "upsets": [
+    {
+      "match": "江原FC vs 富川FC",
+      "market_fav": "H",
+      "actual": "A",
+      "our_dir": "H",
+      "saved_by_intel": false
+    },
+    {
+      "match": "全北现代 vs 首尔FC",
+      "market_fav": "A",
+      "actual": "D",
+      "our_dir": "D",
+      "saved_by_intel": true
+    },
+    {
+      "match": "浦项制铁 vs 金泉尚武",
+      "market_fav": "H",
+      "actual": "A",
+      "our_dir": "H",
+      "saved_by_intel": false
+    },
+    {
+      "match": "赫根 vs 卡尔马",
+      "market_fav": "H",
+      "actual": "D",
+      "our_dir": "H",
+      "saved_by_intel": false
+    },
+    {
+      "match": "迈阿密国际 vs 哥伦布机员",
+      "market_fav": "H",
+      "actual": "D",
+      "our_dir": "H",
+      "saved_by_intel": false
+    }
+  ],
+  "rows": [
+    {
+      "code": "001",
+      "match": "江原FC vs 富川FC",
+      "league": "韩K",
+      "intel": "赛前：江原积分榜前列主场；富川中下游且休赛后连平连负。市场主胜偏热。",
+      "portrait": "江原主场压迫火力更稳；富川客场进球少、更偏低位。克制：主队控场占优，但非稳过大胜盘。",
+      "script": "H/小胜/2-0/1-0/1-1",
+      "λ'": [
+        1.445,
+        1.022
+      ],
+      "P_HDA": [
+        0.466,
+        0.266,
+        0.268
+      ],
+      "SP": [
+        1.44,
+        3.75,
+        5.95
+      ],
+      "p_fair_dir": 0.615,
+      "Edge_eff%": -8.91,
+      "channel": "不荐",
+      "star": "☆☆☆☆☆",
+      "dim": {
+        "HC_key": "H",
+        "Edge_eff_HC%": -6.81,
+        "refine_ticket_only": "A",
+        "note": "Edge_Refine 仅改出票提示，不改【结果预测】"
+      },
+      "patch": "【V15.6补丁】触发=Edge_Refine",
+      "force": "A",
+      "final_dir": "H",
+      "ticket_dir": "A",
+      "market_fav": "H",
+      "score": "0:3",
+      "actual": "A",
+      "hit_dir": false,
+      "ticket_ok": false,
+      "ticket_hit": false,
+      "overround": 1.129
+    },
+    {
+      "code": "002",
+      "match": "全北现代 vs 首尔FC",
+      "league": "韩K",
+      "intel": "赛前：榜首争夺级对决，首尔积分领先/紧咬，全北主场需分。三项接近胶着。",
+      "portrait": "两队防守组织强、中前场互咬；更像控球消耗战。克制：互咬→平局剧本优先。",
+      "script": "D/闷平/0-0/1-1/1-0",
+      "λ'": [
+        1.218,
+        1.218
+      ],
+      "P_HDA": [
+        0.362,
+        0.275,
+        0.362
+      ],
+      "SP": [
+        2.62,
+        2.9,
+        2.48
+      ],
+      "p_fair_dir": 0.305,
+      "Edge_eff%": -1.8,
+      "channel": "不荐",
+      "star": "☆☆☆☆☆",
+      "dim": {
+        "HC_key": "D",
+        "Edge_eff_HC%": -0.62
+      },
+      "patch": "【V15.6补丁】触发=无",
+      "force": null,
+      "final_dir": "D",
+      "ticket_dir": "D",
+      "market_fav": "A",
+      "score": "0:0",
+      "actual": "D",
+      "hit_dir": true,
+      "ticket_ok": false,
+      "ticket_hit": false,
+      "overround": 1.13
+    },
+    {
+      "code": "003",
+      "match": "浦项制铁 vs 金泉尚武",
+      "league": "韩K",
+      "intel": "赛前：浦项中游偏上主场；尚武轮换军中游，客场韧性好。主胜不稳。",
+      "portrait": "浦项主场节奏快但近况起伏；尚武定位球/反击威胁。克制：胶着偏主弱优。",
+      "script": "H/小胜/1-0/2-1/1-1",
+      "λ'": [
+        1.315,
+        1.185
+      ],
+      "P_HDA": [
+        0.395,
+        0.27,
+        0.334
+      ],
+      "SP": [
+        2.29,
+        2.98,
+        2.8
+      ],
+      "p_fair_dir": 0.387,
+      "Edge_eff%": 0.53,
+      "channel": "不荐",
+      "star": "☆☆☆☆☆",
+      "dim": {
+        "HC_key": "H",
+        "Edge_eff_HC%": 0.73
+      },
+      "patch": "【V15.6补丁】触发=无",
+      "force": null,
+      "final_dir": "H",
+      "ticket_dir": "H",
+      "market_fav": "H",
+      "score": "0:1",
+      "actual": "A",
+      "hit_dir": false,
+      "ticket_ok": false,
+      "ticket_hit": false,
+      "overround": 1.129
+    },
+    {
+      "code": "004",
+      "match": "TPS土尔库 vs 玛丽港",
+      "league": "芬超",
+      "intel": "赛前：主队主场热门，客队客场防守偏软。战意主队更明确。",
+      "portrait": "主队主场火力够用；客队客场创造不足。克制：主队压场。",
+      "script": "H/中胜/2-0/3-0/2-1",
+      "λ'": [
+        1.658,
+        1.007
+      ],
+      "P_HDA": [
+        0.523,
+        0.246,
+        0.231
+      ],
+      "SP": [
+        1.39,
+        4.3,
+        5.7
+      ],
+      "p_fair_dir": 0.638,
+      "Edge_eff%": -6.92,
+      "channel": "不荐",
+      "star": "☆☆☆☆☆",
+      "dim": {
+        "HC_key": "H",
+        "Edge_eff_HC%": -7.34,
+        "refine_ticket_only": "A",
+        "note": "Edge_Refine 仅改出票提示，不改【结果预测】"
+      },
+      "patch": "【V15.6补丁】触发=Edge_Refine",
+      "force": "A",
+      "final_dir": "H",
+      "ticket_dir": "A",
+      "market_fav": "H",
+      "score": "3:0",
+      "actual": "H",
+      "hit_dir": true,
+      "ticket_ok": false,
+      "ticket_hit": false,
+      "overround": 1.127
+    },
+    {
+      "code": "005",
+      "match": "赫根 vs 卡尔马",
+      "league": "瑞超",
+      "intel": "赛前：赫根榜眼前列但主场连平；卡尔马客场连败求第一分。",
+      "portrait": "赫根控球但不稳收官；卡尔马低位偷反击。克制：主优但不稳→小胜/防平。",
+      "script": "H/小胜/2-1/1-0/1-1",
+      "λ'": [
+        1.545,
+        1.155
+      ],
+      "P_HDA": [
+        0.461,
+        0.254,
+        0.285
+      ],
+      "SP": [
+        1.62,
+        3.85,
+        3.96
+      ],
+      "p_fair_dir": 0.546,
+      "Edge_eff%": -5.14,
+      "channel": "不荐",
+      "star": "☆☆☆☆☆",
+      "dim": {
+        "HC_key": "H",
+        "Edge_eff_HC%": -4.6,
+        "refine_ticket_only": "A",
+        "note": "Edge_Refine 仅改出票提示，不改【结果预测】"
+      },
+      "patch": "【V15.6补丁】触发=Edge_Refine",
+      "force": "A",
+      "final_dir": "H",
+      "ticket_dir": "A",
+      "market_fav": "H",
+      "score": "1:1",
+      "actual": "D",
+      "hit_dir": false,
+      "ticket_ok": false,
+      "ticket_hit": false,
+      "overround": 1.13
+    },
+    {
+      "code": "006",
+      "match": "腓特烈斯塔 vs 桑纳菲尤尔",
+      "league": "挪超",
+      "intel": "赛前：两队中下游纠缠，主场略优，三项接近。",
+      "portrait": "主队主场求分；客队客场进球一般。克制：小优势主胜。",
+      "script": "H/小胜/1-0/2-1/1-1",
+      "λ'": [
+        1.417,
+        1.288
+      ],
+      "P_HDA": [
+        0.4,
+        0.259,
+        0.341
+      ],
+      "SP": [
+        2.11,
+        3.24,
+        2.88
+      ],
+      "p_fair_dir": 0.419,
+      "Edge_eff%": -1.16,
+      "channel": "不荐",
+      "star": "☆☆☆☆☆",
+      "dim": {
+        "HC_key": "H",
+        "Edge_eff_HC%": -0.85
+      },
+      "patch": "【V15.6补丁】触发=无",
+      "force": null,
+      "final_dir": "H",
+      "ticket_dir": "H",
+      "market_fav": "H",
+      "score": "1:0",
+      "actual": "H",
+      "hit_dir": true,
+      "ticket_ok": false,
+      "ticket_hit": false,
+      "overround": 1.13
+    },
+    {
+      "code": "007",
+      "match": "拉赫蒂 vs 雅罗",
+      "league": "芬超",
+      "intel": "赛前：拉赫蒂主场热门；雅罗客场偏弱。",
+      "portrait": "主队主场节奏压制；客队客场失球偏多。克制：主胜。",
+      "script": "H/小胜/中胜/2-0/2-1/1-0",
+      "λ'": [
+        1.625,
+        1.04
+      ],
+      "P_HDA": [
+        0.507,
+        0.249,
+        0.244
+      ],
+      "SP": [
+        1.39,
+        4.35,
+        5.55
+      ],
+      "p_fair_dir": 0.637,
+      "Edge_eff%": -7.79,
+      "channel": "不荐",
+      "star": "☆☆☆☆☆",
+      "dim": {
+        "HC_key": "H",
+        "Edge_eff_HC%": -5.14,
+        "refine_ticket_only": "A",
+        "note": "Edge_Refine 仅改出票提示，不改【结果预测】"
+      },
+      "patch": "【V15.6补丁】触发=Edge_Refine",
+      "force": "A",
+      "final_dir": "H",
+      "ticket_dir": "A",
+      "market_fav": "H",
+      "score": "2:0",
+      "actual": "H",
+      "hit_dir": true,
+      "ticket_ok": false,
+      "ticket_hit": false,
+      "overround": 1.129
+    },
+    {
+      "code": "008",
+      "match": "斯达 vs 维京",
+      "league": "挪超",
+      "intel": "赛前：维京争冠集团火力爆棚；斯达垫底求生。客胜极热。",
+      "portrait": "维京客场推进强；斯达防不住对攻。克制：客队碾压→客胜。",
+      "script": "A/中胜/大胜/0-2/0-3/1-3",
+      "λ'": [
+        1.06,
+        1.873
+      ],
+      "P_HDA": [
+        0.214,
+        0.228,
+        0.559
+      ],
+      "SP": [
+        5.65,
+        4.62,
+        1.36
+      ],
+      "p_fair_dir": 0.651,
+      "Edge_eff%": -5.57,
+      "channel": "不荐",
+      "star": "☆☆☆☆☆",
+      "dim": {
+        "HC_key": "A",
+        "Edge_eff_HC%": -6.24,
+        "refine_ticket_only": "H",
+        "note": "Edge_Refine 仅改出票提示，不改【结果预测】"
+      },
+      "patch": "【V15.6补丁】触发=Edge_Refine",
+      "force": "H",
+      "final_dir": "A",
+      "ticket_dir": "H",
+      "market_fav": "A",
+      "score": "0:3",
+      "actual": "A",
+      "hit_dir": true,
+      "ticket_ok": false,
+      "ticket_hit": false,
+      "overround": 1.129
+    },
+    {
+      "code": "009",
+      "match": "赫尔火花 vs 库普斯",
+      "league": "芬超",
+      "intel": "赛前：库普斯榜首集团客场；火花中游主场偷分难。",
+      "portrait": "客队整体质量更高；主队主场可纠缠但不稳。克制：客胜小胜。",
+      "script": "A/小胜/0-1/1-2/0-2",
+      "λ'": [
+        1.138,
+        1.462
+      ],
+      "P_HDA": [
+        0.295,
+        0.261,
+        0.444
+      ],
+      "SP": [
+        3.22,
+        3.65,
+        1.84
+      ],
+      "p_fair_dir": 0.482,
+      "Edge_eff%": -2.25,
+      "channel": "不荐",
+      "star": "☆☆☆☆☆",
+      "dim": {
+        "HC_key": "A",
+        "Edge_eff_HC%": -1.64
+      },
+      "patch": "【V15.6补丁】触发=无",
+      "force": null,
+      "final_dir": "A",
+      "ticket_dir": "A",
+      "market_fav": "A",
+      "score": "0:1",
+      "actual": "A",
+      "hit_dir": true,
+      "ticket_ok": false,
+      "ticket_hit": false,
+      "overround": 1.128
+    },
+    {
+      "code": "010",
+      "match": "迈阿密国际 vs 哥伦布机员",
+      "league": "美职",
+      "intel": "赛前：迈阿密主场巨星班底热门；哥伦布防守组织好、客场能磨。",
+      "portrait": "主队进攻上限高；客队反击与定位球威胁。克制：主优但深盘风险→小胜剧本，防平。",
+      "script": "H/小胜/2-1/2-0/1-1",
+      "λ'": [
+        1.725,
+        1.14
+      ],
+      "P_HDA": [
+        0.507,
+        0.24,
+        0.253
+      ],
+      "SP": [
+        1.38,
+        4.65,
+        5.3
+      ],
+      "p_fair_dir": 0.642,
+      "Edge_eff%": -8.11,
+      "channel": "不荐",
+      "star": "☆☆☆☆☆",
+      "dim": {
+        "HC_key": "H",
+        "Edge_eff_HC%": -9.45,
+        "refine_ticket_only": "A",
+        "note": "Edge_Refine 仅改出票提示，不改【结果预测】"
+      },
+      "patch": "【V15.6补丁】触发=Edge_Refine",
+      "force": "A",
+      "final_dir": "H",
+      "ticket_dir": "A",
+      "market_fav": "H",
+      "score": "2:2",
+      "actual": "D",
+      "hit_dir": false,
+      "ticket_ok": false,
+      "ticket_hit": false,
+      "overround": 1.128
+    }
+  ]
+}

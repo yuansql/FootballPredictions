@@ -1,0 +1,331 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║  【足球赛事预测全维闭环量化模型 V16.3】                                       ║
+║  （OSINT取证架构 · 反虚构λ值 · Early_Vuln通用标记版 · 搜索链路硬化版）         ║
+║                                                                              ║
+║  基于 V16.1 优化 — 核心变更：                                                 ║
+║  ① [数据源注册表] 替换裸URL为 优先级链+搜索指令+fallback+口径声明            ║
+║  ② 删除已死锚点 data.djyytools.com（实测→劫持/离线·见§0-B）                  ║
+║  ③ SEARCH_PROTOCOL 每一步显式写出 Search_Q / Parse_Field / Fallback        ║
+║  ④ 新增 SOURCE_TRUST 评级（★/☆/✗）和 FAIL_PATH（弃权>编造）                 ║
+║  ⑤ 新增 NO_NPXG_HIST 分支（国家队/非覆盖联赛·禁止用弱池零封冒充xGA）         ║
+║  基于 V16.2 优化 — V16.3 追加（2026-07-19 复盘）：                            ║
+║  ⑥ [ANTI_FALSE_EDGE] RAW_GOALS λ回归+Edge打折+8%闸；禁假高精度客胜            ║
+║  ⑦ 与主控 V17.4.3 对齐：同轮 Tier3 同构最多 1 场；须输出【取证清单】            ║
+║  核心理念不变：每参数必须搜索可得；若无数据=UNKNOWN/弃权；严禁虚构平滑λ值。  ║
+║  ★ 落表前强制：[FORCE_SEARCH] 见主控；无清单或关键槽有源<2 → 出票不荐。        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 0. 系统自检铁律（每次运行前必须读一遍）
+═══════════════════════════════════════════════════════════════════════════════
+[ANTI_OVERFIT_RULES]
+  1) 任何时候都不允许写：
+       "IF 某队名/某比分发生了 → λ × N.NN"
+       → 只允许：通用二元/连续变量（CB_OUT、GK_OUT、TIER、MinPct…）
+
+  2) EPV_Warning 只能输出文本标记，禁止进入 λ 算术：
+       BAD : Lambda_Home *= 1.12   WHEN EPV≠CLEAN
+       GOOD: 决策表"⚠EPV"栏写 "CORE_CB_OUT→EPV+"，人工裁决是否抬 λ / 防客偷球
+
+  3) 每个"新系数/变量"上线前必须回答：
+       "这条能否对『未来任何同类型比赛』复用？还是只在讲这场故事？"
+       → 答不出 = 扔进 Hypothesis_Log，不进 Active_Rules
+
+  4) 禁止词汇（输出层也禁用）："可能"/"或许"/"看好"/"感觉"
+       只允许：数值 / 区间 / 标记 / Edge%/NO_ACTION
+
+  5) ★ 新增 V16.2：【数据源诚信铁律】
+       - 每个槽位的值必须附 SOURCE_URL 或 SEARCH_Q
+       - 当所有来源 FAIL → 写 UNKNOWN → 走 FLAG 分支 → 绝不反向推导假精度
+       - 口径不匹配（如 FootyStats的xG ≠ Understat的npxG）→ 必须标注 MODEL=
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 0-B. 数据源注册表（SEARCH SOURCE REGISTRY · 唯一权威出入口）
+═══════════════════════════════════════════════════════════════════════════════
+[DATA_SOURCE_REGISTRY]
+
+  ;; ── PRIMARY xG/npxG（口径 = shot-level神经网络模型·非Opta·公开可核对）──
+  UNDERSTAT = {
+      NAME        : "Understat.com"
+      COVERAGE    : "EPL / La_Liga / Bundesliga / Serie_A / Ligue_1 / RFPL  (6联赛)"
+      BASE_URL    : "https://understat.com/league/[CODE]/[SEASON]"
+      SEARCH_Q    : "[team] site:understat.com [league] [season] xG"
+      FIELDS      : "team xG / xGA / npxG / xGDiff / npxGD / pts / position"
+      TRUST       : "★★★ HIGH（口径透明·页面内嵌JSON·可手工抄·可脚本摘）"
+      STATUS      : "VERIFIED_ALIVE 2026-06-15"
+      NOTES       : "俄语超联(RFPL)非世界杯语境·忽略。国家队不在覆盖内→见NO_NPXG_HIST"
+  }
+
+  ;; ── 单场 xG 补充源（有xG展示·但无赛季npxG序列表）──
+  SOFASCORE = {
+      NAME        : "SofaScore.com"
+      SEARCH_Q    : "[Home] [Away] site:sofascore.com [month] [day]"
+                  : "→ 点进比赛页 → 右侧/下方统计区块找 'xG X.X – X.X'"
+      FIELDS      : "single_match_xG / shots_on_target / possession / corners"
+      TRUST       : "★★☆ MEDIUM（xG展示数可用·口径未公开·滚均需手算）"
+      STATUS      : "VERIFIED_ALIVE 2026-06-15"
+      NOTES       : "用来补单场xG→自己手算Last5均值；不可替代Understat的季节表"
+  }
+
+  ;; ── 全局结果/积分榜/赛程（任何层级都可用）──
+  SOCCERWAY = {
+      NAME        : "Soccerway.com"
+      SEARCH_Q    : "[competition] site:soccerway.com standings"
+      FIELDS      : "fixtures / results / table / lineups(historical)"
+      TRUST       : "★★☆ MEDIUM（覆盖极广·含低级别·但xG不提供）"
+      STATUS      : "VERIFIED_ALIVE 2026-06-15"
+  }
+
+  ;; ── 伤停（最稳定的公开伤停源）──
+  TRANSFERMARKT_INJ = {
+      NAME        : "Transfermarkt.com · /verletztespieler/wettbewerb/[CODE]"
+      URL_PATTERN : "https://www.transfermarkt.com/[league-slug]/verletztespieler/wettbewerb/[CODE]"
+      SEARCH_Q    : "[team_name] site:transfermarkt.com injuries"
+                  : "[league_slug] site:transfermarkt.com verletztespieler wettbewerb"
+      FIELDS      : "player / position / injury_type / until_date / market_value"
+      TRUST       : "★★★ HIGH（名单准·结构稳定·可核对URL）"
+      STATUS      : "VERIFIED_ALIVE 2026-06-15 (实测: /NL2 / GB1 / VLBW 等路径均返回表)"
+      NOTES       : "国家队页不一定有·库拉索/非洲队→TM搜不到→GOOGLE_NEWS fallback"
+  }
+
+  ;; ── 赔率（赔率数字√·成交量✗）──
+  ODDS_PORTAL = {
+      NAME        : "OddsPortal.com"
+      BASE_URL    : "https://www.oddsportal.com/football/[region]/[tournament]/"
+      SEARCH_Q    : "site:oddsportal.com [teamA] [teamB] odds"
+                  : "WC2026专用: site:oddsportal.com/football/world/world-championship-2026/"
+      FIELDS      : "open_odds / close_odds / AH_line / OU_line"
+      TRUST       : "★★★ HIGH（赔率数字）/ VOLUME = ✗ UNAVAILABLE（必发/成交量不公开）"
+      STATUS      : "VERIFIED_ALIVE 2026-06-15 (实测: WC2026页德国1.08/库拉索65.00 全匹配)"
+      NOTES       : "Smart Money Filter 必须降格: 无成交量→仅赔率形态分析·非大户流分析"
+  }
+
+  ;; ── 死链墓碑（不要再用）──
+  ; DEAD : http://data.djyytools.com/en/league/17
+  ;        2026-06-15实测→域名劫持/重定向到无关内容·永久删除所有引用
+  ; DEAD : fbref.com advanced xG scrape（Cloudflare保护·不稳定·不列为稳定源）
+
+  ;; ── FIFA排名（官方·任何国家队需要rank diff时必查）──
+  FIFA_RANK = {
+      NAME   : "FIFA / Coca-Cola World Rankings"
+      URL    : "https://www.fifa.com/fifa-world-ranking/ranking-table/men"
+      SEARCH_Q : "FIFA World Rankings [team] site:fifa.com"
+      TRUST  : "★★★ HIGH（官方）"
+  }
+
+;; ── 口径冲突仲裁 ──
+;;   若你从不同站抄到两个"xG"值且差>0.3/场 → 决策表必须写 MODEL_DISCREPANCY
+;;   优先级: Understat_npxG > SofaScore_xG(display) > FootyStats_xG(premium墙)
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 1. 全局常量 / 联赛预设模板（修正：删djyytools·补口径来源字段）
+═══════════════════════════════════════════════════════════════════════════════
+[LEAGUE_TIER_TABLE]
+  ; TIER 1: 五大联赛 / 欧冠 / 世界杯淘汰赛
+  ;   - 分布模型: 泊松分布 (Poisson)
+  ;   - EARLY_VOL: 1.00
+  ;
+  ; TIER 2: 葡超 / 荷甲 / 美职联 / 巴甲
+  ;   - 分布模型: 泊松分布
+  ;   - EARLY_VOL: 1.10
+  ;
+  ; TIER 3: 芬超 / 挪超 / 瑞典超 / 捷甲 / 爱甲 / 奥甲等
+  ;   - 分布模型: 负二项 (Negative Binomial, r=3.5)
+  ;   - EARLY_VOL: 1.30
+  ;
+  ; TIER 4: 半职业 → 娱乐参考，禁实盘
+
+  ; ★ 新增: 口径声明跟随每个模板
+  ;   XG_SOURCE_PREFER = "UNDERSTAT_npxG" | "SOFASCORE_xG_display" | "MANUAL_goals_avg"
+  ;   NPXG_AVAILABLE  = TRUE / FALSE（国家队几乎全FALSE→触发NO_NPXG_HIST）
+
+[LEAGUE_PRESET_TEMPLATE]
+  LG_NAME           = "______"
+  LG_SEASON         = "____/__"
+  LG_TIER            = _
+  LG_AVG_GOALS      = __.__
+  LG_AVG_GOALS_SRC  = "URL_or_SEARCH_Q（必须填·禁写死无来源）"
+  LG_EARLY_VOL      = _.__
+  XG_SOURCE_PREFER  = "UNDERSTAT_npxG"   ; or "SOFASCORE_xG_display" or "MANUAL_goals_avg"
+  NPXG_AVAILABLE    = TRUE
+  ; 例: 英超 NPXG_AVAILABLE=TRUE  XG_SOURCE_PREFER=UNDERSTAT_npxG
+  ; 例: 库拉索 NPXG_AVAILABLE=false → 触发 NO_NPXG_HIST → 走TIER_GAP/P3池校正
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 2. OSINT 取证与数据槽（每场必须填URL/搜索词·无URL=写UNKNOWN→弃权路线）
+═══════════════════════════════════════════════════════════════════════════════
+[SEARCH_PROTOCOL]
+
+  ;; ============================================================
+  ;; Step_1  ::  对阵定位 + 赛程/积分锚点（永远第一步·防"凭印象"）
+  ;; ============================================================
+  STEP_1__FIXTURE_ANCHOR = {
+      GOAL   : "打开一个不会骗你的基准页·确认比赛存在/时间/场地"
+      SEARCH : [
+          "[Home] [Away] [competition] [YYYY-MM-DD] site:soccerway.com",
+          "备选: [competition] site:oddsportal.com/football/... fixtures"
+      ]
+      FILL   : Match_ID / KickOff_UTC / Venue / Competition_stage
+      FAIL   : "基准页找不到→比赛延期/取消→整场STOP·不填槽"
+  }
+
+  ;; ============================================================
+  ;; Step_2  ::  xG / npxG / xGA（最关键·也是最易烂的槽位）
+  ;; ============================================================
+  STEP_2__XG_SLOT = {
+      GOAL   : "拿到两队最近 N≥5 场的 xG_For_Avg / xGA_Avg（最好是npxG口径）"
+
+      ;; -- 主队 --
+      TRY_PRIMARY_HOME: {
+          CONDITION : "LG_TIER<=2 AND NPXG_AVAILABLE=TRUE"
+          ACTION   : "搜: [Home] site:understat.com [league] [season] → 进team页或league表找该行"
+          FETCH    : "xG_For_Avg= / xGA_Avg= / npxG= (抄整行)"
+          SRC_TAG  : "UNDERSTAT"
+      }
+      TRY_FALLBACK_HOME: {
+          CONDITION : "Understat无(国家队/Tier3+) OR 页面打不开"
+          ACTION   : [
+              "搜: [Home] vs [A] site:sofascore.com → 点进最近3~5场→抄每场xG→手算均值"
+              "搜: [Home] [competition] site:soccerway.com [season] standings → 用 GF/GA/MP 算 goals_avg（注明RAW_GOALS_NOT_NPXG）"
+          ]
+          SRC_TAG  : "SOFASCORE_MANUAL_ROLL|RAW_GOALS_FALLBACK"
+          FLAG     : "⚠ NO_NPXG_HIST → 见 NO_NPXG_HIST 分支"
+      }
+      IF_ALL_FAIL_HOME: "Home_xG_For_Avg=UNKNOWN  SRC_TAG=NONE  FLAG=[NO_DATA_no_fill]"
+
+      ;; -- 客队同理 --
+      ; (对称重复→填 Away_xG_For_Avg / Away_xGA_Avg)
+
+      ;; ★ 口径冲突仲裁栏（必须人工填）:
+      XG_MODEL_NOTE: "______"
+      ; 例: "Home npxG from Understat(EPL)✓ / Away=库拉索→NO_NPXG→用世预赛GF/MP=1.2但标[POOL_UNTRUSTED]"
+  }
+
+  ;; ============================================================
+  ;; Step_3  ::  伤停（Transfermarkt为主·Google News为辅）
+  ;; ============================================================
+  STEP_3__INJURIES = {
+      GOAL   : "列出 OUT/SUSP 球员·位置·是否Regular Starter·估MinPct"
+
+      HOME: {
+          TRY_1: "搜: [Home_team] site:transfermarkt.com injuries"
+              ; → 若跳转会页(如 /startseite)：找左侧 Competitions → 联赛页 → 顶部tab或URL拼 /verletztespieler/wettbewerb/[CODE]
+          TRY_2: "若TM无国家队页: 搜: \"[country] national team\" injury list [month] [year] site:google.com"
+              ;   来源限 news/fifa member association/主流媒体·禁论坛帖
+          FILL  : "Player | Pos | APPS_est | OUT_until | SRC_URL"
+          FAIL  : "写 [NO_INJURY_DATA_AVAILABLE] → EPV=CLEAN_ASSUMED_NOT_UNKNOWN"
+              ;   ^ 重要：不是假设"没人伤"→是标记"未核实→EPV不降级也不升级"
+      }
+      ; (Away 对称)
+
+      MIN_PCT_RULE: "Apps_est / (MP_played_in_competition) — 若Competition样本<3 → MinPct=UNK→Pos_Weight不触发"
+  }
+
+  ;; ============================================================
+  ;; Step_4  ::  赔率（仅OddsPortal·明说成交量不可见）
+  ;; ============================================================
+  STEP_4__ODDS = {
+      GOAL   : "填 Odds_Open_H/D/A + Close_H/D/A + AH_line"
+
+      ACTION : "搜: site:oddsportal.com [Home] [Away] odds"
+            : "WC特化: 直接开 https://www.oddsportal.com/football/world/world-championship-2026/ → 找对应比赛行"
+
+      FILL   : "Odds_Open_H= / D= / A=   Odds_Close_H= / D= / A=   AH=   OU_line="
+      CALC   : "Market_Overround / Market_Prob_H,D,A / Edge（需先有Prob_H,D,A从λ来）"
+
+      CAVEAT : "⚠ VOLUME_DATA=UNAVAILABLE → Smart Money Filter 降格为 [赔率形态] 仅"
+      FLAG   : "SMF_MODE=SHAPE_ONLY (deep_1.08_no_retreat→[hot_no_divergence]·非真热警报)"
+  }
+
+  ;; ============================================================
+  ;; ★ 新增 Step_5  ::  FIFA Rank / 身价比（V17.0 P1/P3 的触发条件需要）
+  ;; ============================================================
+  STEP_5__TIER_CONTEXT = {
+      GOAL  : "填 rank_diff / salary_ratio 供 P1/P3 条件求值"
+
+      ACTION: [
+          "开 FIFA ranking table: https://www.fifa.com/fifa-world-ranking/ranking-table/men"
+          "抄:  Home_Rank=# / Away_Rank=#"
+          "搜: [Home] site:transfermarkt.com market value → 抄 squad_total_value"
+      ]
+      FILL  : "FIFA_Rank_H=  FIFA_Rank_A=  RANK_DIFF=|H-A|  SALARY_RATIO=squad_H/squad_A"
+      FAIL  : "RANK_DIFF=UNK → P1 TIER_GAP_OVERRIDE 无法求值 → 改走保守(不禁用slow_start)"
+  }
+
+;; ── 填槽结果必须附的一行 ──────────────────────────────────
+SLOT_INTEGRITY_CHECK:
+  IF ANY([Home_xG_For_Avg, Away_xG_For_Avg] CONTAINS "UNKNOWN") 
+      → PRINT "[NO_NPXG_HIST] 两队均无npxG序列 → λ计算走保守/区间模式 → 见§3.5 alt"
+  IF ANY(SRC_TAG == NONE) 
+      → HALT "铁律违例: 有值无来源 → 回去补 SEARCH_Q"
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 3. 计算引擎（同V16.1主体·加 NO_NPXG_HIST 安全出口）
+═══════════════════════════════════════════════════════════════════════════════
+[VARIABLE_CALCULATION]
+
+  ; ---- 3.1 基础λ ----
+  ; λ_base = (Attack_Strength * Defence_Weak) / LG_AVG_GOALS
+  ; 其中 Attack_Strength = AVG(Last5_xG_For) 或 xG_For_Avg
+  ;   Defence_Weak   = AVG(Last5_xG_Aga) 或 xG_Aga_Avg
+
+  ; ---- 3.1-alt: NO_NPXG_HIST 安全模式 ----
+  ; IF (NPXG_AVAILABLE = FALSE) THEN:
+  ;   λ_base_H = goals_per_game_For_H   (来自 GF/MP·不是xG·明文标注 RAW_GOALS)
+  ;   λ_base_A = goals_per_game_For_A
+  ;   MARK: [XG_SLOT_MODE = RAW_GOALS_FALLBACK · 置信度 LOW · 触发TIER_GAP审阅]
+  ;   → 立刻检查 P1/P3 触发条件:
+  ;      IF RANK_DIFF > 70 AND salary_ratio > 25x AND weak_side_max_sprints_avg < 30km/h
+  ;        → SLOW_START_PENALTY DISABLED (lock <=1.00)
+  ;        → λ_H 不设"首战必慢热"上限
+  ;        → 但 λ_A 仍标 [POOL_UNTRUSTED] 不反推正面防守质量
+
+  ; ---- 3.3 伤停修正（同V16.1·不变） ----
+  ; Pos_Weight: GK=0.15  CB=0.12  DM=0.10  AM=0.12  ST=0.15  FB=0.06
+  ; 仅当 MinPct 可估且 Apps/Total >= 0.50 才计入
+  ; 若 MinPct=UNK → 该惩罚项 = 0 (不编)
+
+  ; ---- 3.5 λ合成 ----
+  Lambda_Home = Lambda_Home_Final - Home_Attack_Penalty + Away_Defence_Penalty
+  Lambda_Away = Lambda_Away_Final - Away_Attack_Penalty + Home_Defence_Penalty
+
+  ; ---- 3.5-alt 区间模式（NO_NPXG时启用）----
+  ; λ_H_range = [ λ_base_H * 0.85 , λ_base_H * 1.60 ]
+  ; λ_A_range = [ λ_base_A * 0.70 , λ_base_A * 1.40 ]  (上限受POOL_UNTRUSTED压制)
+
+  ; ---- 3.5-b FALSE_EDGE（RAW_GOALS 强制 · 与主控 V17.4 同文）----
+  ; ★ 触发看口径不看 Tier：韩K(Tier2)/芬超(Tier3) 凡 RAW_GOALS → 同一套
+  ; 1) LG_HALF = 联赛场均总球/2（芬超≈1.30 挪超≈1.45 瑞超≈1.40 韩K≈1.15，写明来源）
+  ; 2) λ'_side = 0.65 * λ_side + 0.35 * LG_HALF   ← 禁止跳过回归直接泊松
+  ; 3) 用 λ' 算 P_H/D/A → Edge_raw = p_model − p_fair
+  ; 4) Edge_eff = Edge_raw * 0.60
+  ;    若主或客「主场/客场拆分」样本 < 6 场：Edge_eff *= 0.85
+  ; 5) 双闸：胜平负 Edge_eff≥1%；让球/进球≥3%（禁止只用 Edge_raw≥5% 放行）
+  ; 6) Edge_raw≥12% 且方向与 p_fair 热门对打：
+  ;      需 ≥2 条非λ证据（近3 H2H同向 / 对手核心OUT有URL / 休息差≥2）
+  ;      否则 NO_ACTION 原因=FALSE_EDGE_MKT_CONFLICT
+  ; 7) 同轮同构「客胜+小胜+1或3球」类：最多 1 场可介入，其余 TEMPLATE_STACK
+  ; MARK 决策表：Edge_raw / Edge_eff / λ' / FALSE_EDGE=Y
+
+  ; ---- 3.6 EPV（同V16.1·只读·不乘λ） ----
+  ; ---- 3.7 Env_Factor ----
+  ; ---- 3.8 Poisson matrix ----
+  ; ---- 3.9 Market edge ----
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 4. 输出决策表（V16.2：加 SRC 列 + 置信度 + 口径）
+═══════════════════════════════════════════════════════════════════════════════
+| 对阵 | λ_H / λ_A (mode) | xG口径 | ⚠EPV | 数据源可信度 | 市场 | Edge_raw/eff | 方向 | 进球区间 | 风险 |
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+| ____ vs ____ | λ= / λ'= (__range?) | UNDERSTAT_npxG ✅ / RAW_GOALS_FALLBACK ⚠ | [CLEAN/⚠CORE_CB_OUT] | ★★★/★★☆/✗UNK | 1.08/22/65 | __/__ | [ ] | __ | 高(UNKλ)|FALSE_EDGE |
+
+; mode栏写: "POINT" 或 "RANGE(LOW/HIGH)·NO_NPXG"
+
+═══════════════════════════════════════════════════════════════════════════════
+■ 5. （不做强制赛后复盘）
+═══════════════════════════════════════════════════════════════════════════════
+; 与 V17.3 主控一致：预测以赛前决策表为准，不要求赛后归档 / POST_MATCH_AUDIT。
+; 若赛前数据源失败，在决策表「风险」栏写 FLAG（如 NO_NPXG_HIST / UNK）即可。
+
+EOF

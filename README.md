@@ -1,15 +1,16 @@
-# FootballPredictions · 2足球框架 V17.4.6
+# FootballPredictions · 2足球框架 V17.4.9
 
 体彩/竞彩足球预测框架 + 可分发 Agent Skill。  
-**V17.4.6**：双闸门 + 降维 + **V15.6 五补丁**（Kryptonite / Zombie / Jinx / Edge_Refine / StarFactor）。
+**V17.4.9**：**INTEL_FIRST 精简包** + **双轨推荐**（研究五星必含胜平负/进球数/比分；出票可空仓）+ 双闸门 + 降维 + **V15.6 五补丁**。  
+已移除一键全量合并 / 说明书 / 初始框架，减少 Agent 噪音。
 
-**完整用法（含 `sync-skill-bundle.sh` 说明）→ [使用.md](./使用.md)**
+**完整用法 → [使用.md](./使用.md)**
 
 仓库：https://github.com/yuansql/FootballPredictions
 
 ---
 
-## 别人怎么用（拉取）
+## 别人怎么用
 
 ### 方式 A · Skills CLI（推荐）
 
@@ -17,44 +18,17 @@
 npx skills add yuansql/FootballPredictions --skill football-predict-v17
 ```
 
-全局安装：
-
-```bash
-npx skills add yuansql/FootballPredictions --skill football-predict-v17 -g
-```
-
-安装后 skill 在 `.agents/skills/football-predict-v17/`（或全局目录）。  
-框架正文在 skill 内 **`references/`**，补丁在 **`rules/`**（同步进 references/rules），Agent 按 `SKILL.md` 解析 `ROOT`。
-
-### 方式 B · Git 克隆整仓
+### 方式 B · Git 克隆
 
 ```bash
 git clone https://github.com/yuansql/FootballPredictions.git
 cd FootballPredictions
 ```
 
-- Cursor：克隆后用 `@` 引用 `skills/football-predict-v17`，或自行复制到 `~/.cursor/skills`（可选，非必须）
-- 项目内分发入口：`skills/football-predict-v17/`（框架在 `references/`）
+### 方式 C · 千问 / DeepSeek（精简分贴）
 
-复制到个人 Cursor skills（可选；作者本机默认不装）：
-
-```bash
-mkdir -p ~/.cursor/skills/football-predict-v17
-cp -R skills/football-predict-v17/SKILL.md skills/football-predict-v17/output-template.md ~/.cursor/skills/football-predict-v17/
-# 框架在 references/，保持与 SKILL 同级目录结构：
-cp -R skills/football-predict-v17/references ~/.cursor/skills/football-predict-v17/
-```
-
-卸载本机 Cursor skill：
-
-```bash
-rm -rf ~/.cursor/skills/football-predict-v17
-```
-
-### 方式 C · 只给千问 / DeepSeek
-
-下载或复制 `skills/football-predict-v17/references/一键投喂_全量合并.txt`  
-（或仓库根目录同名文件）上传为知识库，按文件内「激活句」使用。
+按联赛粘贴：`外部模型启动卡` + `球赛预测框架` + **一个**插件（小联赛/五大/世界杯）+ `p_model手算` + `投注分析专家`。  
+**不要**再找「一键投喂全量合并」（已废除）。
 
 ### 方式 D · OpenSkills
 
@@ -68,32 +42,27 @@ openskills install yuansql/FootballPredictions
 
 ```text
 FootballPredictions/
-├── 使用.md                            ← 完整使用说明
+├── 使用.md
 ├── README.md
-├── rules/
-│   ├── V15.6_patches.py               ← 可执行五补丁
-│   └── V15.6_patches.txt              ← 补丁规范（Agent 可读）
+├── rules/                 ← V15.6 补丁
 ├── scripts/
-│   └── sync-skill-bundle.sh           ← 源文件同步到 references
-├── skills/
-│   └── football-predict-v17/
-│       ├── SKILL.md
-│       ├── output-template.md
-│       └── references/                ← 框架副本（含 rules/）
-└── *.txt                              ← 开发用源文件
+│   ├── sync-skill-bundle.sh
+│   └── verify_intel_first.py
+├── skills/football-predict-v17/
+│   ├── SKILL.md
+│   ├── output-template.md
+│   └── references/        ← 精简框架副本
+└── *.txt                  ← 源规则（8 个正文）
 ```
 
 ---
 
-## 维护者（你）
-
-改根目录分文件后：
+## 维护者
 
 ```bash
-python3 rebuild_一键投喂.py
-bash scripts/sync-skill-bundle.sh   # 只同步 skills/.../references，不装本机
-# 若要临时装本机：bash scripts/sync-skill-bundle.sh --local-cursor
-git add -A && git commit -m "…" && git push
+bash scripts/sync-skill-bundle.sh
+python3 scripts/verify_intel_first.py
+# 需要本机 Cursor 时：bash scripts/sync-skill-bundle.sh --local-cursor
 ```
 
 ---

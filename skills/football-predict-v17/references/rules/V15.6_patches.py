@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
 VERSION = "V15.6"
-BOUND_TO = "V17.4.6"
+BOUND_TO = "V17.4.9"
 
 
 # ─── 传统三强白名单（可按联赛扩展）──────────────────────────────────────────

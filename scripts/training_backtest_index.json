@@ -1,0 +1,58 @@
+{
+  "purpose": "football-predict-v17 skill 训练素材 · 三窗各30场分层回测",
+  "method": "INTEL=胶着带规则(gap<0.055或top<0.40→D)；Edge=RAW×0.60出票闸；澳客SP",
+  "lesson": "单窗方向命中可在~40%～53%间大幅波动；热门变平+双错冷门是主MISS；出票层长期近0属纪律而非bug",
+  "skill_candidates": [
+    "主控/说明书补「多窗回测方差」免把单30场当长期期望",
+    "胶着阈值：热门变平漏拦 vs INTEL误伤 需人工情报才能真提升，勿只拧阈值",
+    "韩K/瑞超窗内偏弱 → 小联赛插件可加「平局海/杯赛客战」提示，但仍先问再改skill"
+  ],
+  "windows": [
+    {
+      "file": "scripts/backtest_30_ticai.json",
+      "label": "07-29～08-02 后窗",
+      "slate": "竞彩最近30场 2026-07-29～08-02",
+      "n": 30,
+      "intel_acc": 0.5333,
+      "market_acc": 0.4667,
+      "ticket_n": 0,
+      "saved": 2,
+      "hurt": 0,
+      "mclass": null
+    },
+    {
+      "file": "scripts/backtest_30_before_0730.json",
+      "label": "07-25～07-29 前体彩",
+      "slate": "竞彩 2026-07-25～07-29（7月30日前）",
+      "n": 30,
+      "intel_acc": 0.4,
+      "market_acc": 0.4333,
+      "ticket_n": 0,
+      "saved": 1,
+      "hurt": 2,
+      "mclass": {
+        "HIT": 12,
+        "双错冷门": 8,
+        "热门变平": 8,
+        "INTEL误伤(市对)": 2
+      }
+    },
+    {
+      "file": "scripts/backtest_30_0718_0724.json",
+      "label": "07-18～07-24 对照",
+      "slate": "竞彩 2026-07-18～07-24（对照窗）",
+      "n": 30,
+      "intel_acc": 0.4667,
+      "market_acc": 0.5333,
+      "ticket_n": 0,
+      "saved": 1,
+      "hurt": 3,
+      "mclass": {
+        "双错冷门": 6,
+        "HIT": 14,
+        "热门变平": 7,
+        "INTEL误伤(市对)": 3
+      }
+    }
+  ]
+}
