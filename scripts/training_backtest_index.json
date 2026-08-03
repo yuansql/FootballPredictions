@@ -1,7 +1,8 @@
 {
-  "purpose": "football-predict-v17 skill 训练素材 · 三窗各30场分层回测",
+  "purpose": "football-predict-v17 skill 训练素材 · 批量回测窗索引（同构 n=30）",
   "method": "INTEL=胶着带规则(gap<0.055或top<0.40→D)；Edge=RAW×0.60出票闸；澳客SP",
   "lesson": "单窗方向命中可在~40%～53%间大幅波动；热门变平+双错冷门是主MISS；出票层长期近0属纪律而非bug",
+  "separation": "windows[] 只收批量同构回测；会话/人工复盘不得塞进 windows（防噪）。见 related_reviews。",
   "skill_candidates": [
     "主控/说明书补「多窗回测方差」免把单30场当长期期望",
     "胶着阈值：热门变平漏拦 vs INTEL误伤 需人工情报才能真提升，勿只拧阈值",
@@ -53,6 +54,14 @@
         "热门变平": 7,
         "INTEL误伤(市对)": 3
       }
+    }
+  ],
+  "related_reviews": [
+    {
+      "file": "scripts/review_20260802.json",
+      "type": "session_review",
+      "date": "2026-08-02",
+      "note": "会话人工剧本 007–014；不可与 windows 准确率横比"
     }
   ]
 }

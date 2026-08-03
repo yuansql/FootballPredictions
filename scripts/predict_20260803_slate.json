@@ -1,0 +1,159 @@
+{
+  "type": "session_predict",
+  "date": "2026-08-03",
+  "slate": "竞彩周一 001–004（开赛多为 08-04 凌晨/早间北京时间）",
+  "skill": "football-predict-v17 / V17.4.9 双轨推荐",
+  "sp_source": "澳客 jingcai 参考指数（非官局末售）",
+  "disclaimer": "非投资建议；研究推荐≠出票指令",
+  "summary": {
+    "n": 4,
+    "ticket_open": 1,
+    "ticket_codes": ["001"],
+    "research_top": ["001", "002", "004"]
+  },
+  "matches": [
+    {
+      "code": "001",
+      "kick": "2026-08-04 00:00",
+      "league": "芬超",
+      "match": "塞伊奈(SJK) vs 赫尔辛基(HJK)",
+      "L": 1.0,
+      "SP": [2.97, 3.75, 1.9],
+      "intel": {
+        "table": "SJK≈11名14分 / HJK≈3名28分（Veikkausliiga·约17轮）",
+        "form": "SJK近况偏弱(多负)；HJK近况偏强",
+        "sources": ["footballtransfers.com/veikkausliiga", "planetsport table"]
+      },
+      "script": "客胜·小胜",
+      "research": {
+        "stars": "★★★★☆",
+        "1x2": "客胜",
+        "goals": "2或者3球",
+        "score": "0-1 / 1-2 / 1-1",
+        "why": "榜差约8名+14分，客队质量档清晰；主场难翻盘但防平"
+      },
+      "ticket": {
+        "decision": "可介入",
+        "channel": "胜平负",
+        "stars": "★☆☆☆☆",
+        "Edge_eff%": 1.75,
+        "reason": "RAW×0.60 后客向约+1.8%刚过1%闸；Tier3封顶低星"
+      }
+    },
+    {
+      "code": "002",
+      "kick": "2026-08-04 01:00",
+      "league": "瑞超",
+      "match": "哈尔姆斯 vs 天狼星(Sirius)",
+      "L": 1.0,
+      "SP": [7.1, 5.3, 1.25],
+      "intel": {
+        "table": "哈尔姆斯≈16名7分 / 天狼星≈1名38分·未尝败（约14轮）",
+        "form": "天狼星攻防双强(40入17失)；哈尔姆斯垫底失球多",
+        "sources": ["sportstatistik.nu", "fotbollsallsvenskan.se"]
+      },
+      "script": "客胜·小胜~中胜",
+      "research": {
+        "stars": "★★★☆☆",
+        "1x2": "客胜",
+        "goals": "2或者3球",
+        "score": "0-2 / 1-2 / 1-1",
+        "why": "联赛最强档差；但1.25深热门=008式单边穿风险，星级故意压一档"
+      },
+      "ticket": {
+        "decision": "不荐",
+        "channel": "不荐",
+        "stars": "☆☆☆☆☆",
+        "Edge_eff%": -5.43,
+        "Edge_Refine": "冷门扫描触达主胜项——仅旁注，不改客胜剧本",
+        "reason": "负Edge+深盘热门；08-02索尔纳教训"
+      }
+    },
+    {
+      "code": "003",
+      "kick": "2026-08-04 01:00",
+      "league": "瑞超",
+      "match": "佐加顿斯(Djurgården) vs 韦斯特罗(Västerås)",
+      "L": -1.0,
+      "SP": [1.38, 4.5, 5.5],
+      "intel": {
+        "table": "佐加顿斯≈4名23分 / 韦斯特罗≈5名22分（分差1·场次接近）",
+        "form": "中上游互啄，非碾压局",
+        "sources": ["sportstatistik.nu"]
+      },
+      "script": "胶着偏主·小胜",
+      "research": {
+        "stars": "★★☆☆☆",
+        "1x2": "主胜（防平）",
+        "goals": "2或者3球",
+        "score": "1-0 / 2-1 / 1-1",
+        "why": "主场微优但榜次几乎咬死；1.38对胶着局偏短，可信度降"
+      },
+      "ticket": {
+        "decision": "不荐",
+        "channel": "不荐",
+        "stars": "☆☆☆☆☆",
+        "Edge_eff%": -3.62,
+        "reason": "负Edge；短热门+近分差=诱盘风险"
+      }
+    },
+    {
+      "code": "004",
+      "kick": "2026-08-04 08:00",
+      "league": "巴西杯",
+      "match": "巴竞技(Athletico-PR) vs 维多利亚(Vitória)",
+      "L": -1.0,
+      "SP": [1.48, 3.7, 5.45],
+      "intel": {
+        "context": "杯赛1/8首回合·主场Arena da Baixada",
+        "form": "巴甲近6场不败约第3；维多利亚淘汰弗拉后联赛3场不胜且刚0-4负帕尔梅",
+        "sources": ["ge.globo.com", "jogada10.com.br"]
+      },
+      "script": "主不败偏主·小胜",
+      "research": {
+        "stars": "★★★☆☆",
+        "1x2": "主胜",
+        "goals": "1或者2球",
+        "score": "1-0 / 2-1 / 1-1",
+        "why": "主场+联赛状态更好；杯赛首回客队常收着踢，进球偏少防平"
+      },
+      "ticket": {
+        "decision": "不荐",
+        "channel": "不荐",
+        "stars": "☆☆☆☆☆",
+        "Edge_eff%": -1.86,
+        "reason": "负Edge；杯赛首回合方差大"
+      }
+    }
+  ],
+  "tonight_research_top": [
+    {
+      "rank": 1,
+      "code": "001",
+      "stars": "★★★★☆",
+      "1x2": "客胜",
+      "goals": "2或者3",
+      "score": "0-1/1-2/1-1",
+      "stake": "—"
+    },
+    {
+      "rank": 2,
+      "code": "002",
+      "stars": "★★★☆☆",
+      "1x2": "客胜",
+      "goals": "2或者3",
+      "score": "0-2/1-2/1-1",
+      "stake": "—",
+      "warn": "深热门旁注"
+    },
+    {
+      "rank": 3,
+      "code": "004",
+      "stars": "★★★☆☆",
+      "1x2": "主胜",
+      "goals": "1或者2",
+      "score": "1-0/2-1/1-1",
+      "stake": "—"
+    }
+  ]
+}

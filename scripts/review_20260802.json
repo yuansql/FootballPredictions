@@ -1,0 +1,133 @@
+{
+  "type": "session_review",
+  "not_a_backtest_window": true,
+  "date": "2026-08-02",
+  "slate": "竞彩周日 007–014（会话赛前预测复盘）",
+  "method": "人工 INTEL 剧本（对话内表+008完整报告）；非胶着带批量回测；不可与 training windows 横比准确率",
+  "source_results": "澳客 jingcai/2026-08-02",
+  "skill_at_time": "football-predict-v17 / V17.4.7～4.8（复盘时尚未强制双轨研究五星）",
+  "summary": {
+    "n": 8,
+    "dir_hit": 5,
+    "dir_acc": 0.625,
+    "ticket_gate": "几乎全不荐；012让球客向可察未作实仓主推",
+    "primary_miss": "008 索尔纳剧本主胜 → 实 0:3",
+    "lesson": [
+      "档差最大≠必干净：008 升班马客场可穿深热门；011 同逻辑成立",
+      "深热门二串一单边穿即归零",
+      "进球复式比锁胜平负更抗方向翻车（票②）",
+      "Edge_Refine 冷门客胜提示被情报否决 → 008 假阴性，记一笔勿神化否决"
+    ]
+  },
+  "user_tickets": [
+    {
+      "id": 1,
+      "play": "胜平负 2串1",
+      "legs": ["008主胜@~1.31", "011客胜@~1.82"],
+      "stake_cny": 10,
+      "result": "LOSS",
+      "note": "与当晚娱乐二串一同构；008穿"
+    },
+    {
+      "id": 2,
+      "play": "混合过关 2串1（008进球2/3复式）",
+      "legs": ["008总进球2或3", "011客胜@~1.82"],
+      "stake_cny": 8,
+      "result": "WIN_approx",
+      "note": "总球3中+客胜中；约回本有余"
+    }
+  ],
+  "rows": [
+    {
+      "code": "007",
+      "match": "奥卢 vs 坦山猫",
+      "script": "胶着偏主",
+      "score_pick": "1-1 / 1-0 / 0-1",
+      "ticket": "不荐",
+      "actual": "1:0",
+      "actual_1x2": "H",
+      "dir": "HIT",
+      "score_goals": "次选命中"
+    },
+    {
+      "code": "008",
+      "match": "索尔纳 vs 厄格里特",
+      "script": "主胜",
+      "score_pick": "2-0 / 2-1 / 1-1；报告1-0/2-0/2-1；进球2或3",
+      "ticket": "不荐（深盘旁注）",
+      "actual": "0:3",
+      "actual_1x2": "A",
+      "goals": 3,
+      "dir": "MISS",
+      "score_goals": "进球3中 / 比分全灭"
+    },
+    {
+      "code": "009",
+      "match": "KFUM vs 克里斯蒂",
+      "script": "胶着偏主",
+      "score_pick": "1-0 / 1-1 / 0-0",
+      "ticket": "不荐",
+      "actual": "2:1",
+      "actual_1x2": "H",
+      "dir": "HIT",
+      "score_goals": "方向对·比分未锁"
+    },
+    {
+      "code": "010",
+      "match": "莫尔德 vs 萨普斯堡",
+      "script": "主胜小胜",
+      "score_pick": "2-1 / 1-0 / 1-1",
+      "ticket": "不荐",
+      "actual": "3:3",
+      "actual_1x2": "D",
+      "dir": "MISS",
+      "score_goals": "MISS"
+    },
+    {
+      "code": "011",
+      "match": "奥勒松 vs 特罗姆瑟",
+      "script": "客胜",
+      "score_pick": "0-2 / 1-2 / 1-1",
+      "ticket": "不荐",
+      "actual": "2:6",
+      "actual_1x2": "A",
+      "dir": "HIT",
+      "score_goals": "方向中·比分过猛"
+    },
+    {
+      "code": "012",
+      "match": "布兰 vs 罗森博格",
+      "script": "胶着偏主",
+      "score_pick": "1-1 / 2-1 / 1-0",
+      "ticket": "让球客不败可察",
+      "actual": "3:2",
+      "actual_1x2": "H",
+      "dir": "HIT",
+      "score_goals": "偏主对；降维客向未兑现"
+    },
+    {
+      "code": "013",
+      "match": "米拉索尔 vs 格雷米奥",
+      "script": "主不败偏主",
+      "score_pick": "1-0 / 1-1 / 0-0",
+      "ticket": "不荐（杯赛）",
+      "actual": "1:1",
+      "actual_1x2": "D",
+      "dir": "HIT",
+      "score_goals": "次选命中"
+    },
+    {
+      "code": "014",
+      "match": "巴西国际 vs 科林蒂安",
+      "script": "胶着",
+      "score_pick": "1-1 / 0-0 / 1-0",
+      "ticket": "不荐",
+      "actual": "2:0",
+      "actual_1x2": "H",
+      "dir": "MISS",
+      "score_goals": "MISS"
+    }
+  ],
+  "canvas": "aug2-ticai-review.canvas.tsx",
+  "disclaimer": "非投资建议；会话复盘≠批量回测窗"
+}
