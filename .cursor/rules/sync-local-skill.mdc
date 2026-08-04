@@ -1,0 +1,23 @@
+---
+description: 2足球框架 skill 改完必须同步本机 Cursor skill
+globs: skills/football-predict-v17/**/*,*.txt,rules/V15.6_patches.*,scripts/sync-skill-bundle.sh
+alwaysApply: true
+---
+
+# 本机 skill 同步（硬）
+
+在本仓库改动下列任一内容后，**同一回合内必须**执行：
+
+```bash
+bash scripts/sync-skill-bundle.sh
+```
+
+（默认已同步本机；仅打包不装本机时才用 `--no-local`。）
+
+覆盖范围：
+
+- 根目录框架 `.txt`、`rules/V15.6_patches.*`
+- `skills/football-predict-v17/SKILL.md`、`output-template.md`
+- 同步目标：`skills/.../references/` + `.cursor/skills/football-predict-v17/` + `~/.cursor/skills/football-predict-v17/`
+
+禁止：只改仓库 skill / 框架正文却声称「本机已更新」，却未跑同步、未做路径存在或 diff 核对。
