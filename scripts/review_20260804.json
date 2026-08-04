@@ -1,0 +1,99 @@
+{
+  "type": "session_review",
+  "not_a_backtest_window": true,
+  "date": "2026-08-04",
+  "slate": "竞彩周一 001–004（开赛多为 08-03 欧陆晚 / 北京 08-04 凌晨；头条日夹 2026-08-03）",
+  "method": "对照日夹终稿研究推荐（01-竞彩分析 / 02-头条正文）；出票全不荐；会话 slate 仅作对照旁注",
+  "source_results": "BBC Sport / Flashscore / SVT Sport / Terra·Jogada10（完场）",
+  "predict_artifacts": [
+    "/Users/wumm/学习/@@Agent/toutiao/drafts/2026-08-03/01-竞彩分析.md",
+    "/Users/wumm/学习/@@Agent/toutiao/drafts/2026-08-03/02-头条正文.txt",
+    "scripts/predict_20260803_slate.json"
+  ],
+  "skill_at_time": "football-predict-v17 / V17.4.9 双轨推荐",
+  "summary": {
+    "n": 4,
+    "dir_hit": 3,
+    "dir_acc": 0.75,
+    "research_top3_1x2": "2/3（002✓ 001✗ 004✓）",
+    "ticket_gate": "日夹四场全不荐 → 无仓位盈亏；躲过 001",
+    "primary_miss": "001 研究客胜 → 实 3:0 主胜（名次/H2H 叙事被当场打穿）",
+    "dual_source_note": "会话 slate 曾标 001 可介入（澳客 Edge≈+1.8%）；若跟会穿。日夹空仓更正确。",
+    "lesson": [
+      "Tier3 名次差+交锋记忆 ≠ 当场必穿（001）",
+      "深热门客胜：方向可观赛，进球别默认 3/4（002 实 0:2）",
+      "胶着降权可对方向仍错幅度：003 防平小胜 → 实 6:0 屠杀",
+      "发文与会话 slate 必须先统一，再写头条（两套荐单会误导）",
+      "空仓纪律 > 刚过闸低星出票（今晚 001）"
+    ]
+  },
+  "counterfactual": [
+    {
+      "id": "slate_001_ticket",
+      "play": "若跟会话 slate：001 胜平负客胜可介入",
+      "result": "LOSS",
+      "note": "实主胜 3:0"
+    },
+    {
+      "id": "entertain_example",
+      "play": "日夹例：002 进球3/4 × 001 客胜",
+      "result": "LOSS",
+      "note": "002 总球2未中双选；001 方向穿"
+    }
+  ],
+  "rows": [
+    {
+      "code": "001",
+      "match": "塞伊奈(SJK) vs 赫尔辛基(HJK)",
+      "script": "客胜·中小开",
+      "score_pick": "1-2 / 0-2 / 1-1；进球2/3",
+      "ticket": "不荐",
+      "actual": "3:0",
+      "actual_1x2": "H",
+      "goals": 3,
+      "dir": "MISS",
+      "score_goals": "进球3撞区间 / 比分方向全灭",
+      "sources": ["https://www.bbc.com/sport/football/live/c9984m482nyt"]
+    },
+    {
+      "code": "002",
+      "match": "哈尔姆斯 vs 天狼星(Sirius)",
+      "script": "客胜·多球",
+      "score_pick": "0-2 / 1-3 / 0-3；进球3/4（日夹）",
+      "ticket": "不荐（深盘陷阱旁注）",
+      "actual": "0:2",
+      "actual_1x2": "A",
+      "goals": 2,
+      "dir": "HIT",
+      "score_goals": "主推比分0-2命中 / 进球双选3/4未中（slate的2/3更贴）",
+      "sources": ["https://www.bbc.com/sport/football/live/c8jn1p1n3gvt"]
+    },
+    {
+      "code": "003",
+      "match": "佐加顿斯(Djurgården) vs 韦斯特罗(Västerås)",
+      "script": "主胜防平·降权",
+      "score_pick": "2-1 / 1-0 / 1-1；进球2/3",
+      "ticket": "不荐",
+      "actual": "6:0",
+      "actual_1x2": "H",
+      "goals": 6,
+      "dir": "HIT",
+      "score_goals": "方向对·净胜/进球全翻（非胶着兑现）",
+      "sources": ["https://fotbolldirekt.se/allsvenskan/just-nu-djurgardens-slakt-vann-med-6-0/"]
+    },
+    {
+      "code": "004",
+      "match": "巴竞技(Athletico-PR) vs 维多利亚(Vitória)",
+      "script": "主胜小胜（杯赛首回）",
+      "score_pick": "1-0 / 2-0 / 1-1；进球2/3",
+      "ticket": "不荐",
+      "actual": "2:0",
+      "actual_1x2": "H",
+      "goals": 2,
+      "dir": "HIT",
+      "score_goals": "次选比分+进球双选命中",
+      "sources": ["https://www.terra.com.br/esportes/vitoria/athletico-domina-o-vitoria-e-constroi-boa-vantagem-na-copa-do-brasil,298358f6645eefb62e7f119d5c32b6edxwru87rq.html"]
+    }
+  ],
+  "disclaimer": "非投资建议；会话复盘≠批量回测窗；不可与 training windows 准确率横比"
+}

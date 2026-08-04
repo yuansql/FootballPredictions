@@ -62,6 +62,12 @@
       "type": "session_review",
       "date": "2026-08-02",
       "note": "会话人工剧本 007–014；不可与 windows 准确率横比"
+    },
+    {
+      "file": "scripts/review_20260804.json",
+      "type": "session_review",
+      "date": "2026-08-04",
+      "note": "周一001–004（头条日夹研究向）；方向3/4·TOP2/3；001冷穿；不可与 windows 横比"
     }
   ]
 }

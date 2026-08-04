@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""验证 V17.4.9 INTEL_FIRST + 双轨推荐精简包：关键短语 + 样例顺序 + 噪音已删。"""
+"""验证 V17.4.9 INTEL_FIRST + 双轨推荐：关键短语 + 样例顺序 + 噪音已删。"""
 from __future__ import annotations
 
 import re
@@ -63,6 +63,14 @@ REQUIRED_PHRASES = {
     "README.md": ["V17.4.9", "精简包", "双轨推荐"],
 }
 
+# 娱乐二串一不得再硬写进 skill / 启动卡 / 模板（偏好只在记忆）
+ENTERTAINMENT_MUST_ABSENT = {
+    "skills/football-predict-v17/SKILL.md": "【娱乐二串一】",
+    "skills/football-predict-v17/output-template.md": "【娱乐二串一】",
+    "外部模型启动卡.txt": "【娱乐二串一】",
+    "投注分析专家_人设提示词.txt": "【娱乐二串一】",
+}
+
 ORDER_MARKERS = ["【取证清单】", "【情报叙事】", "【球队画像】", "【比赛剧本】", "【Edge"]
 
 NOISE_MUST_ABSENT = [
@@ -85,6 +93,11 @@ def main() -> int:
             if p not in text:
                 fails.append(f"NO_PHRASE {rel} :: {p}")
 
+    for rel, forbidden in ENTERTAINMENT_MUST_ABSENT.items():
+        path = ROOT / rel
+        if path.is_file() and forbidden in path.read_text(encoding="utf-8"):
+            fails.append(f"ENTERTAINMENT_LEAK {rel} :: {forbidden}")
+
     sample = (ROOT / "完整样例_体彩默认.txt").read_text(encoding="utf-8")
     block = sample.split("## 样例 B")[0]
     idxs = []
@@ -103,6 +116,8 @@ def main() -> int:
     skill = (ROOT / "skills/football-predict-v17/SKILL.md").read_text(encoding="utf-8")
     if "V17.4.9" not in skill:
         fails.append("SKILL_VERSION_NOT_1749")
+    if "V17.4.10" in skill:
+        fails.append("SKILL_STILL_HAS_17410")
 
     if re.search(r"作业流[\s\S]{0,200}Edge_eff", skill) and "情报叙事" not in skill.split("## 作业流")[1][:400]:
         fails.append("SKILL_JOBFLOW_STILL_EDGE_FIRST")
@@ -111,30 +126,20 @@ def main() -> int:
     if 'BOUND_TO = "V17.4.9"' not in bound:
         fails.append("PATCHES_BOUND_NOT_1749")
 
-    for name in NOISE_MUST_ABSENT:
-        for base in (ROOT, ROOT / "skills/football-predict-v17/references"):
-            p = base / name
-            if p.exists():
-                fails.append(f"NOISE_STILL_PRESENT {p.relative_to(ROOT)}")
-
-    for name in (
-        "外部模型启动卡.txt",
-        "球赛预测框架.txt",
-        "p_model手算.txt",
-        "投注分析专家_人设提示词.txt",
-        "完整样例_体彩默认.txt",
-        "小联赛数据.txt",
-    ):
-        if not (ROOT / "skills/football-predict-v17/references" / name).is_file():
-            fails.append(f"REF_MISSING {name}")
+    for noise in NOISE_MUST_ABSENT:
+        # root noise files must not exist
+        if (ROOT / noise).exists():
+            fails.append(f"NOISE_PRESENT_ROOT {noise}")
+        ref = ROOT / "skills/football-predict-v17/references" / noise
+        if ref.exists():
+            fails.append(f"NOISE_PRESENT_REF {noise}")
 
     if fails:
         print("FAIL")
         for f in fails:
-            print(" -", f)
+            print(" ", f)
         return 1
-    print("PASS INTEL_FIRST + dual-recommend slim-pack checks")
-    print("OK files=", len(REQUIRED_PHRASES), "noise_gone=", len(NOISE_MUST_ABSENT))
+    print("PASS V17.4.9 INTEL_FIRST + dual-recommend (no skill entertainment 二串一)")
     return 0
 
 
