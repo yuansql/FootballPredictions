@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""日稿 linter：01 比分几何 + 03 RMA（V17.4.16）。"""
+"""日稿 linter：01 邻格簇几何 + 进球档 + 03 RMA（V17.4.17）。"""
 from __future__ import annotations
 
 import argparse
@@ -24,6 +24,12 @@ SCORE_PART_RE = re.compile(
     r"\*\*(\d+-\d+)\*\*\s*(主推|次|防)|旁挂[^\*]*\*\*(\d+-\d+)\*\*|旁\s*(\d+-\d+)",
     re.I,
 )
+# 进球数：2–3 / 2或者3球 / 进球 2-3
+GOALS_BAND_RE = re.compile(
+    r"进球数[：:]\s*([^\n｜|]{1,24})|进球[数区间]*[：:\s]*(\d)\s*[–\-~/到至或]+\s*(\d)",
+    re.I,
+)
+GOALS_RANGE_RE = re.compile(r"(\d)\s*[–\-~/到至或]+\s*(\d)")
 WELD_HINTS: list[tuple[str, tuple[str, ...]]] = [
     ("revenge_home", ("讨债", "同址刚", "三日再战")),
     ("weld_draw", ("焊平", "平局味最浓")),
@@ -96,6 +102,25 @@ def _guess_structure(direction: str, block: str) -> str:
     return "high"
 
 
+def _parse_goals_band(block: str) -> set[int] | None:
+    m = GOALS_BAND_RE.search(block)
+    if not m:
+        return None
+    chunk = (m.group(1) or "").strip()
+    if m.group(2) and m.group(3):
+        return {int(m.group(2)), int(m.group(3))}
+    if chunk:
+        rm = GOALS_RANGE_RE.search(chunk)
+        if rm:
+            return {int(rm.group(1)), int(rm.group(2))}
+        digits = re.findall(r"\d", chunk)
+        if len(digits) >= 2:
+            return {int(digits[0]), int(digits[1])}
+        if len(digits) == 1:
+            return {int(digits[0])}
+    return None
+
+
 def lint_01(path: Path) -> list[str]:
     text = path.read_text(encoding="utf-8")
     issues: list[str] = []
@@ -118,16 +143,20 @@ def lint_01(path: Path) -> list[str]:
         if not main:
             issues.append(f"{title}: 未解析到主推比分")
             continue
+        abstain = "弃权" in tail or "防：弃权" in tail or "防:**弃权" in block
         tier = _guess_structure(direction, block)
         weld = _guess_weld_tag(block, direction)
         tags = [weld] if weld else []
+        band = _parse_goals_band(block)
         geo = lint_score_geometry(
             tier,
             main,
             sub or main,
-            defense or sub or main,
+            "弃权" if abstain else (defense or sub or main),
             旁=pang,
             direction_tags=tags,
+            defense_abstain=abstain,
+            goals_band=band,
         )
         for g in geo:
             issues.append(f"{title}: [{g.code}] {g.message}")
@@ -162,7 +191,7 @@ def lint_day_dir(day_dir: Path) -> list[str]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Lint toutiao drafts for V17.4.16 hooks")
+    ap = argparse.ArgumentParser(description="Lint toutiao drafts for V17.4.17 hooks")
     ap.add_argument("path", nargs="?", help="01.md / 03.md / YYYY-MM-DD 日夹")
     ap.add_argument("--warn-only", action="store_true", help="只打印，exit 0")
     args = ap.parse_args()
