@@ -1,0 +1,14 @@
+{
+  "generated": "2026-08-26",
+  "source": "replay_rma_stats.py on toutiao/drafts/*/03-复盘.md",
+  "matches": 23,
+  "direction_hit_rate": 0.565,
+  "score_hit_rate": 0.217,
+  "score_hit_given_direction_ok": 0.231,
+  "rma": {
+    "direction_rework": 10,
+    "score_rework": 10,
+    "closed": 3
+  },
+  "note": "V17.4.16 基线；优化目标：direction↑ score↑ score|dir_ok↑"
+}
