@@ -84,7 +84,39 @@ def shadow_check(
     return ShadowVerdict(would_demote=False, match_count=hits, reason="ok")
 
 
-def append_ledger(path: Path, row: dict) -> None:
+def counter_hit_shadow_check(
+    fp: ReceiptFingerprint,
+    ledger: Iterable[dict],
+    *,
+    window: int = 10,
+    threshold: int = 1,
+) -> ShadowVerdict:
+    """TOP2 live：近 window 条 direction_miss 中同指纹且 counter_hit ≥ threshold → 硬拦 TOP2。"""
+    recent = list(ledger)[-window:]
+    key = fp.key()
+    hits = 0
+    for row in recent:
+        if row.get("outcome") != "direction_miss":
+            continue
+        sub = str(row.get("subtag", "") or "")
+        note = str(row.get("note", "") or "")
+        if "counter_hit" not in sub and "counter_hit" not in note:
+            continue
+        other = (
+            row.get("weld_tag", "none"),
+            row.get("clause_id", "none"),
+            row.get("counter_direction", "none"),
+            row.get("intel_slot_shape", "none"),
+        )
+        if other == key:
+            hits += 1
+    if hits >= threshold:
+        return ShadowVerdict(
+            would_demote=True,
+            match_count=hits,
+            reason=f"指纹 {key} 已 counter_hit {hits} 次（TOP2 live 拦）",
+        )
+    return ShadowVerdict(would_demote=False, match_count=hits, reason="ok")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -110,6 +142,11 @@ def _self_check() -> None:
     assert v.would_demote
     v2 = shadow_check(fp, ledger[:1], threshold=2)
     assert not v2.would_demote
+    ledger[0]["subtag"] = "counter_hit"
+    v3 = counter_hit_shadow_check(fp, ledger[:1], threshold=1)
+    assert v3.would_demote
+    v4 = counter_hit_shadow_check(fp, ledger[1:], threshold=1)
+    assert not v4.would_demote
     print("OK receipt_fingerprint self-check")
 
 

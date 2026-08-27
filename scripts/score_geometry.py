@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""比分几何 linter：主锚邻格簇 + 进球档（V17.4.17 · ADHD）。
+"""比分推荐 linter：方向×进球档 · 单格权重 Top3（V17.4.20 · ADHD）。
 
 公开/研究三格（主/次/防）须：
-  分析 → 方向 → 主锚 → 邻格（最多 3，彼此接近）
-异族逃生只允许旁注，不进公开三格。
+  分析（双方）→ 方向锁 → 进球档 → 【情景路径】→ **每个比分单独计权** → 取权重 Top3 单格
+收据过闸且反方向 ±1 球叶 ≥τ → **防格绑定该单格**（非套餐；异族只允许这一格）。
+第三与第四单格权重差 <ε → 低结构（只交主+次）。
 """
 from __future__ import annotations
 
@@ -12,6 +13,11 @@ from dataclasses import dataclass
 from typing import Iterable, Sequence
 
 from rma_route import parse_score
+
+# 路径权重和差阈值（权重宜归一到约 1.0）；#3 与 #4 差 <ε → 低结构
+TRIO_EPS = 0.15
+# 反剧本叶须达此权重才绑进公开 防（弱修辞仍旁注）
+COUNTER_TAU = 0.10
 
 
 def outcome_family(score: str) -> str | None:
@@ -27,7 +33,6 @@ def outcome_family(score: str) -> str | None:
 
 
 def margin_sign(score: str) -> int | None:
-    """+1 home win, 0 draw, -1 away win."""
     fam = outcome_family(score)
     if fam == "home":
         return 1
@@ -45,52 +50,61 @@ def goal_total(score: str) -> int | None:
     return parsed[0] + parsed[1]
 
 
-def goal_diff(score: str) -> int | None:
-    parsed = parse_score(score)
-    if parsed is None:
-        return None
-    return parsed[0] - parsed[1]
-
-
-def manhattan(a: str, b: str) -> int | None:
-    pa, pb = parse_score(a), parse_score(b)
-    if pa is None or pb is None:
-        return None
-    return abs(pa[0] - pb[0]) + abs(pa[1] - pb[1])
-
-
-def is_neighbor(
-    anchor: str,
-    candidate: str,
-    *,
-    max_manhattan: int = 2,
-    max_diff: int = 2,
-    max_total_diff: int = 2,
-) -> bool:
-    """邻格：曼哈顿 ≤2，净胜差 ≤2，总球差 ≤2（允 2-0↔1-1、0-0↔1-1）。"""
-    if parse_score(anchor) is None or parse_score(candidate) is None:
-        return False
-    m = manhattan(anchor, candidate)
-    if m is None or m > max_manhattan:
-        return False
-    da, dc = goal_diff(anchor), goal_diff(candidate)
-    ta, tc = goal_total(anchor), goal_total(candidate)
-    if da is None or dc is None or ta is None or tc is None:
-        return False
-    if abs(da - dc) > max_diff:
-        return False
-    if abs(ta - tc) > max_total_diff:
-        return False
-    return True
-
-
 DRAW_TRAP_TAGS = frozenset({"weld_draw", "manage_tie"})
+
+# 方向族 × 常见进球档 → 有限候选（分析排序用；lint 只验「在表∪同方向」）
+# 平局格可进主胜/客胜方向三格（防平叙事），不靠邻格几何。
+CANDIDATE_TABLE: dict[str, dict[frozenset[int], tuple[str, ...]]] = {
+    "home": {
+        frozenset({1, 2}): ("1-0", "2-0", "2-1", "1-1", "0-0"),
+        frozenset({2, 3}): ("2-1", "2-0", "1-0", "3-1", "3-0", "1-1", "2-2"),
+        frozenset({3, 4}): ("3-1", "2-1", "3-0", "4-1", "4-0", "2-2", "1-1"),
+        frozenset({1}): ("1-0", "0-0", "1-1"),
+        frozenset({2}): ("2-0", "2-1", "1-1", "1-0"),
+        frozenset({3}): ("2-1", "3-0", "3-1", "1-2"),
+    },
+    "away": {
+        frozenset({1, 2}): ("0-1", "0-2", "1-2", "1-1", "0-0"),
+        frozenset({2, 3}): ("1-2", "0-2", "0-1", "1-3", "0-3", "1-1", "2-2"),
+        frozenset({3, 4}): ("1-3", "1-2", "0-3", "1-4", "0-4", "2-2", "1-1"),
+        frozenset({1}): ("0-1", "0-0", "1-1"),
+        frozenset({2}): ("0-2", "1-2", "1-1", "0-1"),
+        frozenset({3}): ("1-2", "0-3", "1-3", "2-1"),
+    },
+    "draw": {
+        frozenset({0, 1}): ("0-0", "1-1"),
+        frozenset({1, 2}): ("1-1", "0-0", "2-2"),
+        frozenset({2, 3}): ("1-1", "2-2", "0-0", "2-1", "1-2"),
+        frozenset({2}): ("1-1", "2-2", "0-0"),
+        frozenset({0}): ("0-0",),
+        frozenset({1}): ("1-1", "0-0"),
+    },
+}
 
 
 @dataclass
 class GeometryIssue:
     code: str
     message: str
+
+
+@dataclass(frozen=True)
+class PathLeaf:
+    path_id: str
+    weight: float
+    score: str
+
+
+@dataclass(frozen=True)
+class TrioCompareResult:
+    """单格权重排序结果（保留名 trio_compare 供 lint 调用）。"""
+
+    ranked_leaves: tuple[tuple[str, float], ...]  # 每个比分单独计权，降序
+    best_trio: tuple[str, ...]  # 权重 Top2 或 Top3 **单格**（非组合套餐）
+    best_sum: float  # 最高权单格权重
+    runner_sum: float  # 第4名单格权重（用于 margin；无则 0）
+    margin: float  # 第3与第4单格权重差
+    structure_hint: str  # high | low
 
 
 def _scored_slots(main: str, sub: str, defense: str) -> list[str]:
@@ -101,75 +115,41 @@ def _scored_slots(main: str, sub: str, defense: str) -> list[str]:
     return out
 
 
-def cluster_ok(
-    main: str,
-    sub: str,
-    defense: str,
-    *,
-    direction_tags: Sequence[str] = (),
-    allow_adjacent_draw: bool = True,
-) -> list[GeometryIssue]:
-    """公开三格邻域闸：同号（或一格邻近平）+ 相对主锚邻格。"""
-    issues: list[GeometryIssue] = []
-    tags = set(direction_tags)
-    slots = _scored_slots(main, sub, defense)
-    if len(slots) < 2:
-        return issues
+def direction_family_from_text(direction: str) -> str | None:
+    d = direction.strip()
+    if any(x in d for x in ("胶着", "并列")):
+        return None  # low structure; caller decides
+    if "客胜" in d and "主胜" not in d:
+        return "away"
+    if "主胜" in d:
+        return "home"
+    if d in ("平", "平局") or (d.startswith("平") and "防" not in d[:2]):
+        return "draw"
+    if "平" in d and "客不败" in d:
+        return "draw"
+    if "客不败" in d or "主不败" in d:
+        return None
+    return None
 
-    anchor = main if parse_score(main) else slots[0]
-    a_sign = margin_sign(anchor)
-    if a_sign is None:
-        return issues
 
-    signs = [margin_sign(s) for s in slots]
-    win_signs = {s for s in signs if s in (-1, 1)}
-    draw_count = sum(1 for s in signs if s == 0)
-
-    if len(win_signs) > 1:
-        issues.append(
-            GeometryIssue(
-                "opposite_sign_in_cluster",
-                "公开三格不得混主胜族与客胜族；异族逃生只写旁注",
-            )
-        )
-
-    if draw_count and a_sign != 0:
-        if not allow_adjacent_draw and not tags.intersection(DRAW_TRAP_TAGS):
-            issues.append(
-                GeometryIssue(
-                    "draw_without_receipt",
-                    "主胜/客胜锚旁挂平局须 weld_draw/manage_tie 收据，或只交两格邻胜分",
-                )
-            )
-        # 邻近平：1-1 next to 2-1 OK；0-0 next to 2-1 usually fails neighbor
-
-    if a_sign == 0 and win_signs and not tags.intersection(DRAW_TRAP_TAGS):
-        # 平锚可带一侧小胜邻格（胶着）
-        pass
-
-    for s in slots:
-        if s == anchor:
-            continue
-        if not is_neighbor(anchor, s):
-            issues.append(
-                GeometryIssue(
-                    "not_neighbor_of_anchor",
-                    f"{s} 相对主锚 {anchor} 超出邻格（曼哈顿≤2 且净胜/总球差≤2）",
-                )
-            )
-
-    # 簇内总球跨度：默认 ≤2；draw-trap 可略宽到 3（1-1/0-0/1-2）
-    totals = [goal_total(s) for s in slots if goal_total(s) is not None]
-    max_spread = 3 if tags.intersection(DRAW_TRAP_TAGS) else 2
-    if len(totals) >= 2 and max(totals) - min(totals) > max_spread:
-        issues.append(
-            GeometryIssue(
-                "cluster_total_spread",
-                f"三格总进球跨度过大（{min(totals)}–{max(totals)}），须彼此接近",
-            )
-        )
-
-    return issues
+def candidates_for(direction_family: str, band: set[int] | None) -> set[str]:
+    """有限候选表；无档则退回该方向全部常用分。"""
+    rows = CANDIDATE_TABLE.get(direction_family, {})
+    if band:
+        key = frozenset(band)
+        if key in rows:
+            return set(rows[key])
+        # 模糊：任意与 band 有交集的行并集
+        out: set[str] = set()
+        for k, vals in rows.items():
+            if k & band:
+                out.update(vals)
+        if out:
+            return out
+    out = set()
+    for vals in rows.values():
+        out.update(vals)
+    return out
 
 
 def goals_band_ok(
@@ -193,6 +173,360 @@ def goals_band_ok(
     return issues
 
 
+def counter_family_from_text(counter_direction: str) -> str | None:
+    d = (counter_direction or "").strip()
+    if not d or d in ("未触发", "无", "none"):
+        return None
+    if "客胜" in d:
+        return "away"
+    if "主胜" in d:
+        return "home"
+    if "平" in d:
+        return "draw"
+    return None
+
+
+def is_one_goal(score: str) -> bool:
+    parsed = parse_score(score)
+    if parsed is None:
+        return False
+    return abs(parsed[0] - parsed[1]) == 1
+
+
+def pick_counter_leaf(
+    ranked: Sequence[tuple[str, float]],
+    counter_fam: str,
+    *,
+    tau: float = COUNTER_TAU,
+) -> str | None:
+    """反方向最高权 ±1 球单格（平则取平格）；weight <τ 视为修辞，不绑。"""
+    for score, w in ranked:
+        if w < tau:
+            continue
+        fam = outcome_family(score)
+        if fam != counter_fam:
+            continue
+        if counter_fam in ("home", "away") and not is_one_goal(score):
+            continue
+        return score
+    return None
+
+
+def pack_with_counter(
+    ranked: Sequence[tuple[str, float]],
+    counter_score: str,
+) -> tuple[str, str, str] | None:
+    """主/次 = 非反方向族权重顶二；防 = 绑定反方向单格。"""
+    cfam = outcome_family(counter_score)
+    pool = [(s, w) for s, w in ranked if s != counter_score and outcome_family(s) != cfam]
+    if len(pool) < 2:
+        pool = [(s, w) for s, w in ranked if s != counter_score]
+    if len(pool) < 2:
+        return None
+    return (pool[0][0], pool[1][0], counter_score)
+
+
+def merge_leaf_weights(paths: Sequence[PathLeaf]) -> list[tuple[str, float]]:
+    """同终场分权重相加（**每个比分单独**），按权重降序。"""
+    acc: dict[str, float] = {}
+    for p in paths:
+        if not parse_score(p.score):
+            continue
+        acc[p.score] = acc.get(p.score, 0.0) + float(p.weight)
+    return sorted(acc.items(), key=lambda x: (-x[1], x[0]))
+
+
+def trio_compare(
+    paths: Sequence[PathLeaf],
+    *,
+    eps: float = TRIO_EPS,
+) -> TrioCompareResult | None:
+    """按单格权重取 Top3：主=第1单格，次=第2，防=第3；第3与第4差 <ε → 低结构。"""
+    ranked = merge_leaf_weights(paths)
+    if len(ranked) < 2:
+        return None
+
+    top1_w = ranked[0][1]
+    w3 = ranked[2][1] if len(ranked) >= 3 else 0.0
+    w4 = ranked[3][1] if len(ranked) >= 4 else 0.0
+    margin = w3 - w4 if len(ranked) >= 4 else w3
+
+    # 不足三格，或第三单格与第四单格权重胶着 → 低结构只交两格
+    hint = "low" if len(ranked) < 3 or margin < eps else "high"
+    if hint == "low":
+        best = (ranked[0][0], ranked[1][0])
+    else:
+        best = (ranked[0][0], ranked[1][0], ranked[2][0])
+
+    return TrioCompareResult(
+        ranked_leaves=tuple(ranked),
+        best_trio=best,
+        best_sum=top1_w,
+        runner_sum=w4,
+        margin=margin,
+        structure_hint=hint,
+    )
+
+
+def lint_trio_compare(
+    main: str,
+    sub: str,
+    defense: str,
+    paths: Sequence[PathLeaf],
+    *,
+    structure_tier: str,
+    defense_abstain: bool = False,
+    eps: float = TRIO_EPS,
+    counter_direction: str = "",
+    weld_family: str | None = None,
+) -> list[GeometryIssue]:
+    """有路径时：公开格须=单格权重 Top2/Top3；ε 胶着须低结构。
+
+    高结构 + 反方向与焊轴异号：防格须绑 ±1 球 counter 叶（V17.4.20）。
+    """
+    issues: list[GeometryIssue] = []
+    if len(paths) < 2:
+        issues.append(
+            GeometryIssue(
+                "missing_scenario_paths",
+                "须 ≥2 条【情景路径】（path_id｜weight｜终场）才能做单格权重排序",
+            )
+        )
+        return issues
+
+    cmp = trio_compare(paths, eps=eps)
+    if cmp is None:
+        issues.append(
+            GeometryIssue("missing_scenario_paths", "路径终场分无法解析，无法做单格排序")
+        )
+        return issues
+
+    declared = _scored_slots(main, sub, defense if not defense_abstain else "")
+    expected = list(cmp.best_trio)
+    cfam = counter_family_from_text(counter_direction)
+    opposite = (
+        weld_family in ("home", "away")
+        and cfam in ("home", "away")
+        and cfam != weld_family
+    )
+    counter_score = (
+        pick_counter_leaf(cmp.ranked_leaves, cfam) if opposite and cfam else None
+    )
+
+    if (
+        structure_tier == "high"
+        and opposite
+        and not defense_abstain
+        and not counter_score
+    ):
+        issues.append(
+            GeometryIssue(
+                "missing_counter_bind",
+                f"收据 counter={counter_direction} 须有 ≥τ={COUNTER_TAU} 的 ±1 球情景叶"
+                "并占用公开 防格（真爆冷最像几分）；弱叶仍旁注",
+            )
+        )
+
+    if counter_score and structure_tier == "high" and not defense_abstain:
+        packed = pack_with_counter(cmp.ranked_leaves, counter_score)
+        if packed:
+            expected = list(packed)
+            if len(declared) >= 3:
+                if declared[2] != counter_score:
+                    issues.append(
+                        GeometryIssue(
+                            "counter_bind_mismatch",
+                            f"防格须绑反方向单格 {counter_score}（现 {declared[2]}）；"
+                            "02 可写「真爆冷最像该分」",
+                        )
+                    )
+                if declared[0] != expected[0] or declared[1] != expected[1]:
+                    issues.append(
+                        GeometryIssue(
+                            "trio_pick_mismatch",
+                            f"主/次须为焊轴族顶二 {expected[0]}/{expected[1]} "
+                            f"（现 {declared[0]}/{declared[1]}）",
+                        )
+                    )
+            elif len(declared) < 3:
+                issues.append(
+                    GeometryIssue(
+                        "counter_bind_mismatch",
+                        f"高结构收据场防格须交反方向 {counter_score}，不得弃权",
+                    )
+                )
+        return issues
+
+    if cmp.structure_hint == "low":
+        if structure_tier == "high" and parse_score(defense) and not defense_abstain:
+            issues.append(
+                GeometryIssue(
+                    "trio_margin_epsilon",
+                    f"第3与第4单格权重差 {cmp.margin:.3f} <ε={eps}，"
+                    f"禁止硬交三格；须降为低结构（主={expected[0]} 次={expected[1]}，防弃权）",
+                )
+            )
+        if len(declared) >= 2 and len(cmp.ranked_leaves) >= 2:
+            top_score = cmp.ranked_leaves[0][0]
+            second_w = cmp.ranked_leaves[1][1]
+            allowed_sub = {
+                s for s, w in cmp.ranked_leaves[1:] if abs(w - second_w) < 1e-9
+            }
+            if declared[0] != top_score or declared[1] not in allowed_sub:
+                issues.append(
+                    GeometryIssue(
+                        "trio_pick_mismatch",
+                        f"公开主/次={declared[0]}/{declared[1]} "
+                        f"≠ 单格权重 Top2 {top_score}+{{{','.join(sorted(allowed_sub))}}} "
+                        f"(margin={cmp.margin:.3f})",
+                    )
+                )
+        return issues
+
+    # high：三格 = 单格权重 Top3（主=第1，次=第2，防=第3）
+    if len(declared) < 3:
+        issues.append(
+            GeometryIssue(
+                "trio_pick_mismatch",
+                f"高结构须交三格=单格权重 Top3 {'/'.join(expected)}；缺格",
+            )
+        )
+        return issues
+
+    exp_main, exp_sub, exp_def = expected[0], expected[1], expected[2]
+    if declared != [exp_main, exp_sub, exp_def]:
+        issues.append(
+            GeometryIssue(
+                "trio_pick_mismatch",
+                f"公开 {'/'.join(declared)} ≠ 单格 Top3 {'/'.join(expected)} "
+                f"(#1={cmp.best_sum:.3f} #3-#4 margin={cmp.margin:.3f})；"
+                "每个比分单独计权，禁止套餐/组合任选",
+            )
+        )
+    return issues
+
+
+def lint_anti_echo(
+    paths: Sequence[PathLeaf],
+    main: str,
+    sub: str,
+    defense: str,
+    *,
+    structure_tier: str,
+    counter_bound: str | None = None,
+) -> list[GeometryIssue]:
+    """同链全是同一胜族、公开三格无平/反方向 → 双计回声。"""
+    if structure_tier != "high" or len(paths) < 2:
+        return []
+    fams = {outcome_family(p.score) for p in paths if parse_score(p.score)}
+    win_fams = fams & {"home", "away"}
+    if len(win_fams) != 1 or "draw" in fams:
+        return []
+    slots = _scored_slots(main, sub, defense)
+    slot_fams = {outcome_family(s) for s in slots}
+    if "draw" in slot_fams:
+        return []
+    if counter_bound and counter_bound in slots:
+        return []
+    return [
+        GeometryIssue(
+            "anti_echo_no_hedge",
+            "情景叶与公开格同一胜族、无平防/反方向格：同链双计。"
+            "防须换 1-1 或收据 ±1 球反方向（异链路）",
+        )
+    ]
+
+
+def lint_top3_rank(
+    main: str,
+    sub: str,
+    defense: str,
+    *,
+    direction_family: str | None,
+    goals_band: set[int] | None = None,
+    direction_tags: Sequence[str] = (),
+    allow_draw_hedge: bool = True,
+    counter_defense: str | None = None,
+) -> list[GeometryIssue]:
+    """公开三格：同方向（可含一格平防）+ 总球∈档 + 宜在候选表内。
+
+    不查曼哈顿邻格。混主客胜族 → fail。
+    收据绑定的 ±1 球防格可豁免异族（仅该一格）。
+    """
+    issues: list[GeometryIssue] = []
+    tags = set(direction_tags)
+    slots = _scored_slots(main, sub, defense)
+    if len(slots) < 2:
+        return issues
+
+    signs = [margin_sign(s) for s in slots]
+    win_signs = {s for s in signs if s in (-1, 1)}
+    if len(win_signs) > 1:
+        waived = False
+        if counter_defense and counter_defense in slots and is_one_goal(counter_defense):
+            others = [s for s in slots if s != counter_defense]
+            other_win = {margin_sign(s) for s in others} & {-1, 1}
+            if len(other_win) <= 1:
+                waived = True
+        if not waived:
+            issues.append(
+                GeometryIssue(
+                    "opposite_sign_in_cluster",
+                    "公开三格不得混主胜族与客胜族；异族逃生只写旁注"
+                    "（收据 ±1 球防格除外）",
+                )
+            )
+
+    # 推断方向族
+    fam = direction_family
+    if fam is None and len(win_signs) == 1:
+        fam = "home" if 1 in win_signs else "away"
+    if fam is None and all(s == 0 for s in signs if s is not None):
+        fam = "draw"
+
+    if fam in ("home", "away") and allow_draw_hedge:
+        pass
+
+    if fam and "weld_draw" not in tags and "manage_tie" not in tags:
+        for s in slots:
+            if s == counter_defense:
+                continue
+            sf = outcome_family(s)
+            if sf is None:
+                continue
+            if fam in ("home", "away") and sf not in (fam, "draw"):
+                issues.append(
+                    GeometryIssue(
+                        "off_direction_score",
+                        f"{s} 不在锁死方向族 {fam}（平格防平除外）",
+                    )
+                )
+            if fam == "draw" and sf not in ("draw", "home", "away"):
+                pass
+
+    issues.extend(goals_band_ok(slots, goals_band))
+
+    if fam in CANDIDATE_TABLE and goals_band:
+        allowed = candidates_for(fam, goals_band)
+        hedge = {"1-1", "0-0", "2-2"} if fam in ("home", "away") else set()
+        if counter_defense:
+            hedge = set(hedge) | {counter_defense}
+        for s in slots:
+            if s not in allowed and s not in hedge:
+                if outcome_family(s) in (fam, "draw") or (
+                    fam == "draw" and outcome_family(s) in ("home", "away", "draw")
+                ):
+                    issues.append(
+                        GeometryIssue(
+                            "outside_candidate_table",
+                            f"{s} 不在方向={fam}×进球档={sorted(goals_band)} 候选表；"
+                            "须有双方分析理由或改旁注",
+                        )
+                    )
+
+    return issues
+
+
 def lint_score_geometry(
     structure_tier: str,
     main: str,
@@ -203,129 +537,301 @@ def lint_score_geometry(
     direction_tags: Sequence[str] = (),
     defense_abstain: bool = False,
     goals_band: set[int] | None = None,
+    direction_text: str = "",
+    paths: Sequence[PathLeaf] | None = None,
+    require_paths: bool = False,
+    eps: float = TRIO_EPS,
+    counter_direction: str = "",
 ) -> list[GeometryIssue]:
     """structure_tier: high | low
 
-    V17.4.17：高结构用邻格簇（非异族正交）。
-    旁格仍可用于 #2 逃生，但不参与公开簇校验。
+    V17.4.20：单格 Top3 + 收据 ±1 球防格绑定 + 同链反回声。
     """
     issues: list[GeometryIssue] = []
     tags = set(direction_tags)
+    fam = direction_family_from_text(direction_text) if direction_text else None
+    cfam = counter_family_from_text(counter_direction)
+    counter_score = None
+    if paths and fam and cfam and fam != cfam and cfam in ("home", "away"):
+        ranked = merge_leaf_weights(paths)
+        counter_score = pick_counter_leaf(ranked, cfam)
+
+    if paths:
+        issues.extend(
+            lint_trio_compare(
+                main,
+                sub,
+                defense,
+                paths,
+                structure_tier=structure_tier,
+                defense_abstain=defense_abstain,
+                eps=eps,
+                counter_direction=counter_direction,
+                weld_family=fam,
+            )
+        )
+        issues.extend(
+            lint_anti_echo(
+                paths,
+                main,
+                sub,
+                defense,
+                structure_tier=structure_tier,
+                counter_bound=counter_score,
+            )
+        )
+    elif require_paths:
+        issues.append(
+            GeometryIssue(
+                "missing_scenario_paths",
+                "高结构须写【情景路径】并做单格权重排序；禁止无路径任选",
+            )
+        )
 
     if structure_tier == "low":
         if not defense_abstain and defense.strip() and parse_score(defense):
             issues.append(
                 GeometryIssue("low_tier_scored_defense", "低结构场防应显式弃权，不得第三精确分")
             )
-        # 主+次须邻格
-        if parse_score(main) and parse_score(sub) and not is_neighbor(main, sub):
-            issues.append(
-                GeometryIssue(
-                    "not_neighbor_of_anchor",
-                    f"低结构主/次须邻格：{sub} 相对 {main} 过远",
+        issues_dir: list[GeometryIssue] = []
+        scored = _scored_slots(main, sub, "")
+        if len(scored) >= 2:
+            signs = {margin_sign(s) for s in scored}
+            win = signs & {-1, 1}
+            if len(win) > 1:
+                issues_dir.append(
+                    GeometryIssue(
+                        "opposite_sign_in_cluster",
+                        "公开三格不得混主胜族与客胜族；异族逃生只写旁注",
+                    )
                 )
-            )
-        issues.extend(goals_band_ok([main, sub], goals_band))
+        issues_dir.extend(goals_band_ok([main, sub], goals_band))
         if defense_abstain and not 旁 and not any(t in tags for t in DRAW_TRAP_TAGS):
-            issues.append(
+            issues_dir.append(
                 GeometryIssue("abstain_without旁", "低结构防弃权时旁注可留 #2 逃生（研究侧）")
             )
+        issues.extend(issues_dir)
         return issues
 
-    # high：邻格簇（公开 ≤3）
     issues.extend(
-        cluster_ok(
+        lint_top3_rank(
             main,
             sub,
             defense,
+            direction_family=fam,
+            goals_band=goals_band,
             direction_tags=direction_tags,
-            allow_adjacent_draw=True,
+            counter_defense=counter_score if defense == counter_score else None,
         )
     )
-    scored = _scored_slots(main, sub, defense)
-    issues.extend(goals_band_ok(scored, goals_band))
-
-    # weld_draw：平族簇可接受双平 + 一邻格小胜
-    if "weld_draw" in tags:
-        issues = [i for i in issues if i.code != "draw_without_receipt"]
-
+    if tags.intersection(DRAW_TRAP_TAGS):
+        issues = [i for i in issues if i.code != "outside_candidate_table"]
     return issues
 
 
 def clone_index(baskets: Iterable[tuple[str, str, str]]) -> float:
-    """邻格违规占比（越高越差）。旧名保留供周报。"""
+    """公开三格违规占比（越高越差）。"""
     rows = list(baskets)
     if not rows:
         return 0.0
     bad = 0
     for main, sub, defense in rows:
-        if lint_score_geometry("high", main, sub, defense):
+        if lint_score_geometry("high", main, sub, defense, goals_band={2, 3}, direction_text="主胜"):
             bad += 1
     return bad / len(rows)
 
 
-def cluster_spread(main: str, sub: str, defense: str) -> int | None:
-    """相对主锚的最大曼哈顿距离。"""
-    if not parse_score(main):
-        return None
-    spreads = []
-    for s in (sub, defense):
-        if parse_score(s):
-            m = manhattan(main, s)
-            if m is not None:
-                spreads.append(m)
-    return max(spreads) if spreads else 0
-
-
 def _self_check() -> None:
-    # 接近主胜簇 OK
-    issues = lint_score_geometry("high", "2-1", "1-0", "2-0")
-    assert not issues, issues
-
-    # 邻近平 OK
-    issues = lint_score_geometry("high", "2-1", "1-0", "1-1")
-    assert not issues, issues
-
-    # 异族逃生进三格 FAIL
-    issues = lint_score_geometry("high", "2-1", "1-0", "0-1")
-    assert any(i.code == "opposite_sign_in_cluster" for i in issues), issues
-
-    # 散开 FAIL（0-0 与 2-1 过远）
-    issues = lint_score_geometry("high", "2-1", "0-0", "3-1")
-    assert any(
-        i.code in ("not_neighbor_of_anchor", "cluster_total_spread", "opposite_sign_in_cluster")
-        for i in issues
+    # 形状闸：两套都能过方向×档（≠同等推荐）
+    issues = lint_score_geometry(
+        "high", "2-1", "1-0", "1-1", goals_band={1, 2, 3}, direction_text="主胜"
+    )
+    assert not any(
+        i.code in ("opposite_sign_in_cluster", "outside_goals_band") for i in issues
     ), issues
 
+    issues = lint_score_geometry(
+        "high", "2-1", "2-0", "1-1", goals_band={2, 3}, direction_text="主胜"
+    )
+    assert not any(i.code == "opposite_sign_in_cluster" for i in issues), issues
+    assert not any(i.code == "outside_goals_band" for i in issues), issues
+
+    # 单格 Top3：2-1>2-0=1-1>1-0 → 2-1/2-0/1-1（1-0 排第四，不进三格）
+    paths_win_20 = [
+        PathLeaf("A", 0.40, "2-1"),
+        PathLeaf("B", 0.25, "2-0"),
+        PathLeaf("C", 0.25, "1-1"),
+        PathLeaf("D", 0.10, "1-0"),
+    ]
+    cmp = trio_compare(paths_win_20, eps=TRIO_EPS)
+    assert cmp is not None
+    assert cmp.best_trio == ("2-1", "1-1", "2-0"), cmp
+    assert cmp.structure_hint == "high", cmp
+    issues = lint_score_geometry(
+        "high",
+        "2-1",
+        "1-1",
+        "2-0",
+        goals_band={2, 3},
+        direction_text="主胜",
+        paths=paths_win_20,
+    )
+    assert not any(i.code == "trio_pick_mismatch" for i in issues), issues
+    # 1-0 权重不够进 Top3
+    issues = lint_score_geometry(
+        "high",
+        "2-1",
+        "1-0",
+        "1-1",
+        goals_band={1, 2, 3},
+        direction_text="主胜",
+        paths=paths_win_20,
+    )
+    assert any(i.code == "trio_pick_mismatch" for i in issues), issues
+
+    # 1-0 单格权重高于 2-0 → Top3 含 1-0 不含 1-1（非套餐二选一）
+    paths_10_over_20 = [
+        PathLeaf("A", 0.40, "2-1"),
+        PathLeaf("B", 0.30, "1-0"),
+        PathLeaf("C", 0.20, "2-0"),
+        PathLeaf("D", 0.05, "1-1"),
+    ]
+    cmp = trio_compare(paths_10_over_20, eps=TRIO_EPS)
+    assert cmp is not None and cmp.best_trio == ("2-1", "1-0", "2-0"), cmp
+
+    # ε 胶着 → 须低结构
+    paths_tie = [
+        PathLeaf("A", 0.34, "2-1"),
+        PathLeaf("B", 0.22, "2-0"),
+        PathLeaf("C", 0.22, "1-0"),
+        PathLeaf("D", 0.22, "1-1"),
+    ]
+    cmp = trio_compare(paths_tie, eps=0.15)
+    assert cmp is not None and cmp.structure_hint == "low", cmp
+    issues = lint_score_geometry(
+        "high",
+        "2-1",
+        "2-0",
+        "1-1",
+        goals_band={1, 2, 3},
+        direction_text="主胜",
+        paths=paths_tie,
+        eps=0.15,
+    )
+    assert any(i.code == "trio_margin_epsilon" for i in issues), issues
+    issues = lint_score_geometry(
+        "low",
+        "2-1",
+        "2-0",
+        "弃权",
+        defense_abstain=True,
+        goals_band={2, 3},
+        direction_text="胶着偏主",
+        paths=paths_tie,
+        eps=0.15,
+        旁="0-1",
+    )
+    assert not any(i.code == "trio_margin_epsilon" for i in issues), issues
+
+    # 异族逃生进三格 FAIL
+    issues = lint_score_geometry(
+        "high", "2-1", "1-0", "0-1", goals_band={1, 2, 3}, direction_text="主胜"
+    )
+    assert any(i.code == "opposite_sign_in_cluster" for i in issues), issues
+
     # 进球档
-    issues = lint_score_geometry("high", "2-1", "1-1", "2-0", goals_band={2, 3})
-    assert not issues, issues
-    issues = lint_score_geometry("high", "2-1", "1-1", "2-0", goals_band={1})
+    issues = lint_score_geometry(
+        "high", "2-1", "1-0", "1-1", goals_band={2, 3}, direction_text="主胜"
+    )
     assert any(i.code == "outside_goals_band" for i in issues), issues
 
-    # weld_draw 平簇
-    issues = lint_score_geometry("high", "1-1", "0-0", "1-2", direction_tags=["weld_draw"])
-    # 1-2 vs 1-1 neighbor? manhattan=1, diff 0 vs -1 =1, totals 2 vs 3 =1 → OK
-    # but opposite? draw + away — win_signs={-1}, a_sign=0 → OK path
+    issues = lint_score_geometry(
+        "high", "2-1", "2-0", "1-1", goals_band={2, 3}, direction_text="主胜"
+    )
+    assert not any(i.code == "outside_goals_band" for i in issues), issues
+
+    # weld_draw
+    issues = lint_score_geometry(
+        "high",
+        "1-1",
+        "0-0",
+        "1-2",
+        direction_tags=["weld_draw"],
+        goals_band={0, 1, 2, 3},
+        direction_text="平",
+    )
     assert not any(i.code == "opposite_sign_in_cluster" for i in issues), issues
 
-    # 低结构主次须邻格
-    issues = lint_score_geometry("low", "2-1", "0-2", "弃权", defense_abstain=True, 旁="0-1")
-    assert any(i.code == "not_neighbor_of_anchor" for i in issues), issues
-
-    issues = lint_score_geometry("low", "2-1", "1-1", "弃权", defense_abstain=True)
+    # 低结构
+    issues = lint_score_geometry(
+        "low",
+        "2-1",
+        "1-1",
+        "弃权",
+        defense_abstain=True,
+        goals_band={2, 3},
+        direction_text="胶着偏主",
+    )
+    assert not any(i.code == "not_neighbor_of_anchor" for i in issues), issues
     assert any(i.code == "abstain_without旁" for i in issues), issues
 
-    assert is_neighbor("2-1", "1-0")
-    assert is_neighbor("2-1", "1-1")
-    assert is_neighbor("2-0", "1-1")  # 经典主胜邻平
-    # 0-1 相对 2-1 几何上可能相邻，但 lint 须因异号拒
-    assert is_neighbor("2-1", "0-1")
-    issues = lint_score_geometry("high", "2-1", "1-0", "0-1")
-    assert any(i.code == "opposite_sign_in_cluster" for i in issues)
-    assert cluster_spread("2-1", "1-0", "1-1") == 2
+    issues = lint_score_geometry(
+        "high", "2-1", "3-0", "1-1", goals_band={2, 3}, direction_text="主胜"
+    )
+    assert not any(i.code == "not_neighbor_of_anchor" for i in issues), issues
+    assert not any(i.code == "opposite_sign_in_cluster" for i in issues), issues
 
-    print("OK score_geometry self-check (V17.4.17 neighbor cluster)")
+    # V17.4.20：收据 + 0-1 叶 → 防格绑定；异族豁免
+    paths_counter = [
+        PathLeaf("A", 0.40, "2-1"),
+        PathLeaf("B", 0.25, "2-0"),
+        PathLeaf("C", 0.20, "1-1"),
+        PathLeaf("D", 0.15, "0-1"),
+    ]
+    assert pick_counter_leaf(merge_leaf_weights(paths_counter), "away") == "0-1"
+    issues = lint_score_geometry(
+        "high",
+        "2-1",
+        "2-0",
+        "0-1",
+        goals_band={1, 2, 3},
+        direction_text="主胜",
+        paths=paths_counter,
+        counter_direction="客胜",
+    )
+    assert not any(i.code == "opposite_sign_in_cluster" for i in issues), issues
+    assert not any(i.code == "counter_bind_mismatch" for i in issues), issues
+    issues = lint_score_geometry(
+        "high",
+        "2-1",
+        "2-0",
+        "1-1",
+        goals_band={1, 2, 3},
+        direction_text="主胜",
+        paths=paths_counter,
+        counter_direction="客胜",
+    )
+    assert any(i.code == "counter_bind_mismatch" for i in issues), issues
+
+    # 同链无对冲
+    paths_echo = [
+        PathLeaf("A", 0.40, "2-1"),
+        PathLeaf("B", 0.30, "2-0"),
+        PathLeaf("C", 0.20, "3-0"),
+        PathLeaf("D", 0.10, "1-0"),
+    ]
+    issues = lint_score_geometry(
+        "high",
+        "2-1",
+        "2-0",
+        "3-0",
+        goals_band={2, 3},
+        direction_text="主胜",
+        paths=paths_echo,
+    )
+    assert any(i.code == "anti_echo_no_hedge" for i in issues), issues
+
+    print("OK score_geometry self-check (V17.4.20 单格 Top3 + counter_bind)")
 
 
 if __name__ == "__main__":

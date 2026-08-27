@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# V17.4.17 框架验收：intel + accuracy hooks + 可选日稿 lint
+# V17.4.20 框架验收：intel + accuracy hooks + 可选日稿 lint
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"

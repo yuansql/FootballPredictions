@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""V17.4.17 准确率钩：RMA / 邻格簇几何 / 收据指纹 shadow。"""
+"""V17.4.20 准确率钩：RMA / 单格 Top3 / counter 防格 / 指纹 TOP2 live。"""
 from __future__ import annotations
 
 import sys
@@ -30,12 +30,27 @@ def main() -> int:
         print(f"OK shadow ledger: no demote yet (hits={v.match_count}, need 2 for shadow)")
 
     skill = (ROOT / "skills/football-predict-v17/SKILL.md").read_text(encoding="utf-8")
-    for phrase in ("V17.4.17", "RMA", "邻格簇", "收据指纹"):
+    for phrase in (
+        "V17.4.20",
+        "RMA",
+        "单格 Top3",
+        "每个比分单独",
+        "收据指纹",
+        "ht_path",
+        "counter_hit",
+        "防格",
+    ):
         if phrase not in skill:
             print(f"FAIL SKILL missing {phrase}")
             return 1
+    if "同等合法" in skill and "禁止" not in skill:
+        print("FAIL SKILL still treats 同等合法 as allowed")
+        return 1
+    if "套餐" not in skill or "禁止" not in skill:
+        print("FAIL SKILL must ban 三格套餐/组合")
+        return 1
 
-    print("PASS V17.4.17 accuracy hooks (RMA + neighbor cluster + fingerprint shadow)")
+    print("PASS V17.4.20 accuracy hooks (RMA + counter_bind + HT/FT + TOP2 live)")
     return 0
 
 
