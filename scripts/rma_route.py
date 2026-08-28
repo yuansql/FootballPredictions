@@ -33,9 +33,14 @@ def outcome_1x2(home: int, away: int) -> str:
 
 
 def normalize_direction(text: str) -> set[str]:
+    """解析研究/对外方向允许集。
+
+    「胶着」= 三向（只用于 01 研究句）。「并列」只并所写的边（平/客胜并列 ≠ 主胜）。
+    对外对账必须喂 02 句面，禁止把 01「胶着偏x」冒充对外方向。
+    """
     t = text.strip()
     out: set[str] = set()
-    if "胶着" in t or "并列" in t:
+    if "胶着" in t:
         out.update({"主胜", "平", "客胜"})
         return out
     if "主胜" in t or "主" in t.split("（")[0]:
@@ -92,6 +97,10 @@ def _self_check() -> None:
     assert route_rma("主胜", "主胜", ["2-1", "2-0", "1-1", "3-1"], "2-0") == RmaRoute.CLOSED
     # 3-0 同族但未进精确分 → score_rework
     assert route_rma("主胜", "主胜", ["2-1", "2-0", "1-1", "3-1"], "3-0") == RmaRoute.SCORE_REWORK
+    # 08-27 费伦茨：并列 ≠ 三向；4-0 主胜是方向穿
+    assert normalize_direction("平 / 客胜并列（90′）") == {"平", "客胜"}
+    assert route_rma("平 / 客胜并列（90′）", "主胜", ["1-1", "0-1", "1-0"], "4-0") == RmaRoute.DIRECTION_REWORK
+    assert "客胜" in normalize_direction("胶着偏主")
     print("OK rma_route self-check")
 
 

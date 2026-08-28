@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""日稿 linter：01 单格 Top3 + counter 防格 + HT/FT + TOP2 闸 + 03 RMA（V17.4.20）。"""
+"""日稿 linter：01 单格 Top3 + counter 防格 + HT/FT + TOP2 闸 + 03 RMA（V17.4.21）。"""
 from __future__ import annotations
 
 import argparse
 import re
 import sys
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -20,6 +21,19 @@ from receipt_fingerprint import (
 from score_geometry import PathLeaf, lint_score_geometry
 
 ROOT = Path(__file__).resolve().parents[1]
+
+DAY_RE = re.compile(r"(20\d{2}-\d{2}-\d{2})")
+# 命中率 1/3、7/9；不吃 2-1/1-1 比分篮
+HITRATE_RE = re.compile(r"(?<![\d.\-])(\d{1,2})/(\d{1,2})(?![\d.\-])")
+NAIL_RE = re.compile(r"今晚我钉[一二三四五六七八九1-9]场")
+EMPTY_TOP2_RE = re.compile(r"无高结构\s*TOP2|今晚不设\s*TOP2|宁缺：无高结构")
+ANALOGY_RE = re.compile(r"里昂课|结构同类")
+SIGN_TRIPLE_RE = re.compile(
+    r"符号三元组|(追分|领先).{0,32}(主|客)|(主|客).{0,32}(追分|领先)"
+)
+BOOK_LABELS = ("对外三场", "01篮", "全表")
+SLOT_RULE_DAY = date(2026, 8, 28)
+BOOK_RULE_DAY = date(2026, 8, 27)
 
 SECTION_RE = re.compile(r"^##\s+场次[｜|](.+)$", re.M)
 DIR_SCORE_RE = re.compile(
@@ -58,6 +72,14 @@ TOP_BLOCK_RE = re.compile(r"【今晚研究 TOP】(.+?)(?=\n【|\Z)", re.S)
 TOP_LINE_RE = re.compile(r"^([123])[\.、]\s*(.+)$", re.M)
 
 RMA_TABLE_RE = re.compile(r"^\|\s*.+\s*\|\s*direction_rework|score_rework|closed", re.M | re.I)
+
+
+def parse_draft_day(path: Path) -> date | None:
+    m = DAY_RE.search(str(path))
+    if not m:
+        return None
+    y, mo, d = (int(x) for x in m.group(1).split("-"))
+    return date(y, mo, d)
 
 
 @dataclass
@@ -224,7 +246,9 @@ def lint_top2(text: str, metas: list[SectionMeta], ledger: list[dict]) -> list[s
     return issues
 
 
-def _lint_section(block: str, title: str) -> tuple[list[str], SectionMeta | None]:
+def _lint_section(
+    block: str, title: str, *, day: date | None = None
+) -> tuple[list[str], SectionMeta | None]:
     issues: list[str] = []
     m = DIR_SCORE_RE.search(block)
     if not m:
@@ -270,6 +294,14 @@ def _lint_section(block: str, title: str) -> tuple[list[str], SectionMeta | None
         issues.append(f"{title}: 疑似 {weld} 焊叙事但未写【反剧本收据】（V17.4.15）")
     if OVERCONFIDENT_RE.search(block) and tier == "low":
         issues.append(f"{title}: [overconfident_low_structure] 低结构禁必/铁定口吻")
+    if day is not None and day >= SLOT_RULE_DAY and "胶着" in direction:
+        rm = re.search(r"胜平负[：:]\s*([^\n｜]+)", block)
+        if rm:
+            pub = rm.group(1)
+            if "胶着" not in pub and "并列" not in pub:
+                issues.append(
+                    f"{title}: 01 方向胶着，研究行胜平负不得收成更窄（{pub.strip()}）"
+                )
     for ht in lint_ht_ft(block, direction, weld):
         issues.append(f"{title}: [ht_ft] {ht}")
     if weld == "continuation_guest" and "主胜" in direction:
@@ -293,6 +325,7 @@ def _lint_section(block: str, title: str) -> tuple[list[str], SectionMeta | None
 def lint_01(path: Path, ledger: list[dict] | None = None) -> list[str]:
     text = path.read_text(encoding="utf-8")
     issues: list[str] = []
+    day = parse_draft_day(path)
     sections = list(SECTION_RE.finditer(text))
     if not sections:
         issues.append(f"{path.name}: 无 ## 场次 段")
@@ -304,7 +337,7 @@ def lint_01(path: Path, ledger: list[dict] | None = None) -> list[str]:
         end = sections[i + 1].start() if i + 1 < len(sections) else len(text)
         block = text[start:end]
         title = sec.group(1).strip()
-        extra, meta = _lint_section(block, title)
+        extra, meta = _lint_section(block, title, day=day)
         issues.extend(extra)
         if meta:
             metas.append(meta)
@@ -312,6 +345,45 @@ def lint_01(path: Path, ledger: list[dict] | None = None) -> list[str]:
     if ledger is None:
         ledger = load_ledger(ROOT / "data/miss_fingerprint_ledger.jsonl")
     issues.extend(lint_top2(text, metas, ledger))
+    if day is not None and day >= SLOT_RULE_DAY:
+        if ANALOGY_RE.search(text) and not SIGN_TRIPLE_RE.search(text):
+            issues.append(
+                f"{path.name}: 写了里昂课/结构同类但缺符号三元组（追分|领先 × 主|客）"
+            )
+    return issues
+
+
+def lint_03_books(text: str, day: date | None, name: str) -> list[str]:
+    if day is not None and day < BOOK_RULE_DAY:
+        return []
+    if not HITRATE_RE.search(text):
+        return []
+    missing = [lab for lab in BOOK_LABELS if lab not in text]
+    if missing:
+        return [
+            f"{name}: 出现命中率分数但缺三本账标签 {','.join(missing)}（对外三场/01篮/全表）"
+        ]
+    return []
+
+
+def lint_02_nail(day_dir: Path) -> list[str]:
+    day = parse_draft_day(day_dir)
+    if day is None or day < SLOT_RULE_DAY:
+        return []
+    f01 = day_dir / "01-竞彩分析.md"
+    f02 = day_dir / "02-头条正文.txt"
+    if not f02.is_file():
+        html = day_dir / "02-头条正文.html"
+        if html.is_file():
+            f02 = html
+        else:
+            return []
+    t02 = f02.read_text(encoding="utf-8")
+    issues: list[str] = []
+    if NAIL_RE.search(t02) and "别拿主胜凑席" in t02:
+        issues.append(f"{f02.name}: 「钉K场」与「别拿主胜凑席」不得同文（看槽≠钉槽）")
+    if f01.is_file() and EMPTY_TOP2_RE.search(f01.read_text(encoding="utf-8")) and NAIL_RE.search(t02):
+        issues.append(f"{f02.name}: 01 已宁缺 TOP2，禁止「今晚我钉三场」枚举方向")
     return issues
 
 
@@ -324,6 +396,7 @@ def lint_03(path: Path) -> list[str]:
         issues.append(f"{path.name}: RMA 表无 direction_rework/score_rework/closed 行")
     if "三问" not in text:
         issues.append(f"{path.name}: 缺三问声明")
+    issues.extend(lint_03_books(text, parse_draft_day(path), path.name))
     return issues
 
 
@@ -336,11 +409,26 @@ def lint_day_dir(day_dir: Path) -> list[str]:
         issues.extend(lint_01(f01, ledger))
     if f03.is_file():
         issues.extend(lint_03(f03))
+    issues.extend(lint_02_nail(day_dir))
     return issues
 
 
+def _self_check() -> None:
+    assert parse_draft_day(Path("drafts/2026-08-27/03-复盘.md")) == date(2026, 8, 27)
+    assert HITRATE_RE.search("方向 1/3")
+    assert HITRATE_RE.search("| **对外三场** | 1/3 | 0/3 |")
+    assert not HITRATE_RE.search("2-1/1-1")
+    miss = lint_03_books("方向 1/3", date(2026, 8, 27), "x.md")
+    assert miss and "三本账" in miss[0]
+    assert not lint_03_books(
+        "方向 1/3\n对外三场\n01篮\n全表9场", date(2026, 8, 27), "x.md"
+    )
+    assert not lint_03_books("方向 1/3", date(2026, 8, 15), "x.md")
+    print("OK lint_draft self-check")
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Lint toutiao drafts for V17.4.20 hooks")
+    ap = argparse.ArgumentParser(description="Lint toutiao drafts for V17.4.21 hooks")
     ap.add_argument("path", nargs="?", help="01.md / 03.md / YYYY-MM-DD 日夹")
     ap.add_argument("--warn-only", action="store_true", help="只打印，exit 0")
     args = ap.parse_args()

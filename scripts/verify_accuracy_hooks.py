@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import rma_route  # noqa: E402
 import receipt_fingerprint  # noqa: E402
 import score_geometry  # noqa: E402
+import lint_draft  # noqa: E402
 from receipt_fingerprint import fingerprint_from_fields, load_ledger, shadow_check  # noqa: E402
 
 
@@ -19,6 +20,7 @@ def main() -> int:
     rma_route._self_check()
     score_geometry._self_check()
     receipt_fingerprint._self_check()
+    lint_draft._self_check()
 
     ledger_path = ROOT / "data/miss_fingerprint_ledger.jsonl"
     ledger = load_ledger(ledger_path)
@@ -39,6 +41,10 @@ def main() -> int:
         "ht_path",
         "counter_hit",
         "防格",
+        "V17.4.21",
+        "钉槽",
+        "符号三元组",
+        "三本账",
     ):
         if phrase not in skill:
             print(f"FAIL SKILL missing {phrase}")
@@ -50,7 +56,7 @@ def main() -> int:
         print("FAIL SKILL must ban 三格套餐/组合")
         return 1
 
-    print("PASS V17.4.20 accuracy hooks (RMA + counter_bind + HT/FT + TOP2 live)")
+    print("PASS V17.4.21 accuracy hooks (RMA + nail-slot + books + sign triple)")
     return 0
 
 
