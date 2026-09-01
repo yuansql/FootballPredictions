@@ -10,7 +10,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from rma_route import normalize_direction, outcome_1x2, parse_score, route_rma, score_in_basket
+from rma_route import (
+    outcome_1x2,
+    parse_score,
+    public_allowed_set,
+    route_rma_public,
+    score_in_basket,
+)
 
 ROW_RE = re.compile(
     r"^\|\s*(?:TOP\d+|边|\d+)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*\*\*(.+?)\*\*",
@@ -56,7 +62,9 @@ def parse_review(path: Path) -> list[dict]:
             continue
         a1x2 = outcome_1x2(*parsed)
         basket = _basket_from_cell(scores)
-        rma = route_rma(direction, a1x2, basket, actual)
+        claim = public_allowed_set(direction, basket)
+        counts = bool(claim)
+        rma = route_rma_public(direction, a1x2, basket, actual)
         rows.append(
             {
                 "match": match.strip(),
@@ -64,8 +72,9 @@ def parse_review(path: Path) -> list[dict]:
                 "basket": basket,
                 "actual_score": actual,
                 "actual_1x2": a1x2,
-                "direction_ok": a1x2 in normalize_direction(direction),
-                "score_ok": score_in_basket(actual, basket),
+                "counts_public": counts,
+                "direction_ok": (a1x2 in claim) if counts else False,
+                "score_ok": score_in_basket(actual, basket) if counts else False,
                 "rma": rma.value,
             }
         )
@@ -73,19 +82,22 @@ def parse_review(path: Path) -> list[dict]:
 
 
 def summarize(all_rows: list[dict]) -> dict:
-    n = len(all_rows)
+    countable = [r for r in all_rows if r.get("counts_public", True)]
+    n = len(countable)
+    skipped = len(all_rows) - n
     if n == 0:
-        return {"n": 0}
-    dir_ok = sum(1 for r in all_rows if r["direction_ok"])
-    score_ok = sum(1 for r in all_rows if r["score_ok"])
+        return {"n": 0, "skipped": skipped}
+    dir_ok = sum(1 for r in countable if r["direction_ok"])
+    score_ok = sum(1 for r in countable if r["score_ok"])
     rma_counts: dict[str, int] = {}
     for r in all_rows:
         rma_counts[r["rma"]] = rma_counts.get(r["rma"], 0) + 1
     return {
         "n": n,
+        "skipped": skipped,
         "direction_rate": dir_ok / n,
         "score_rate": score_ok / n,
-        "score_rate_given_dir_ok": sum(1 for r in all_rows if r["direction_ok"] and r["score_ok"])
+        "score_rate_given_dir_ok": sum(1 for r in countable if r["direction_ok"] and r["score_ok"])
         / max(1, dir_ok),
         "rma": rma_counts,
     }
@@ -109,7 +121,9 @@ def main() -> int:
             print(f"## {f.parent.name} ({len(rows)} matches)")
             for r in rows:
                 mark = "✓" if r["score_ok"] else "·"
-                dmark = "D✓" if r["direction_ok"] else "D✗"
+                dmark = "D—" if not r.get("counts_public", True) else (
+                    "D✓" if r["direction_ok"] else "D✗"
+                )
                 print(
                     f"  {dmark} {mark} [{r['rma']}] {r['match'][:30]} "
                     f"{r['actual_score']} | basket={r['basket']}"
@@ -118,10 +132,14 @@ def main() -> int:
 
     s = summarize(all_rows)
     print("\n=== TOTAL ===")
-    if s["n"] == 0:
+    if not all_rows:
         print("no parsed rows (need 对照表 with **score** in 赛果列)")
         return 1
-    print(f"matches={s['n']}")
+    if s["n"] == 0:
+        print(f"matches=0 skipped={s.get('skipped', 0)} (all vacant/skip)")
+        print(f"RMA={s.get('rma', {})}")
+        return 0
+    print(f"matches={s['n']} skipped={s.get('skipped', 0)}")
     print(f"direction_hit={s['direction_rate']:.1%}")
     print(f"score_hit={s['score_rate']:.1%}")
     print(f"score_hit|direction_ok={s['score_rate_given_dir_ok']:.1%}")

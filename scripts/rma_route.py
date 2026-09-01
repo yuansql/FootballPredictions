@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""RMA 双仓路由：方向返修 vs 比分返修（V17.4.16 · ADHD）。"""
+"""RMA 双仓路由：方向返修 vs 比分返修（V17.4.16 · 对外入口 V17.4.22.2 空槽 skip）。"""
 from __future__ import annotations
 
 import re
@@ -12,6 +12,7 @@ class RmaRoute(str, Enum):
     DIRECTION_REWORK = "direction_rework"
     SCORE_REWORK = "score_rework"
     CLOSED = "closed"
+    SKIP = "skip"  # 空槽 / 无对外 claim：不进分母，不是 direction miss
 
 
 _SCORE_RE = re.compile(r"^\s*(\d+)\s*[-:：]\s*(\d+)\s*$")
@@ -74,6 +75,86 @@ def score_in_basket(actual: str, basket: Sequence[str]) -> bool:
     return False
 
 
+def atoms_from_scores(scores: Iterable[str]) -> set[str]:
+    """比分格推出的 1X2 集合（并集）。"""
+    out: set[str] = set()
+    for item in scores:
+        parsed = parse_score(str(item))
+        if parsed:
+            out.add(outcome_1x2(*parsed))
+    return out
+
+
+def public_allowed_set(surface: str, grid: Sequence[str] | None = None) -> set[str]:
+    """对外方向允许集：只认格子/锁，禁止把「胶着」扩成三向。空槽=∅（不理 01 篮）。"""
+    t = (surface or "").strip()
+    if "锁平" in t:
+        return {"平"}
+    if "锁主" in t:
+        return {"主胜"}
+    if "锁客" in t:
+        return {"客胜"}
+    if "空槽" in t:
+        return set()
+    atoms = atoms_from_scores(grid or [])
+    if atoms:
+        return atoms
+    if "胶着" in t:
+        if "偏主" in t:
+            return {"主胜", "平"}
+        if "偏客" in t:
+            return {"客胜", "平"}
+        return set()
+    return normalize_direction(t)
+
+
+def classify_miss(label: str, claim: set[str], actual_1x2: str) -> str | None:
+    """A=允许集没有实战 1X2；lean_flip=偏X 反号；None=方向命中。"""
+    if actual_1x2 in claim:
+        return None
+    if "偏客" in label and actual_1x2 == "主胜":
+        return "lean_flip"
+    if "偏主" in label and actual_1x2 == "客胜":
+        return "lean_flip"
+    return "A"
+
+
+def score_miss_class(actual_score: str, basket: Sequence[str]) -> str | None:
+    """比分仓分类。None=篮内命中；屠杀净≥4 且篮无净≥3 → 合同外（不提案改 skill）。"""
+    if score_in_basket(actual_score, basket):
+        return None
+    parsed = parse_score(actual_score)
+    if parsed is None:
+        return "in_contract_pack"
+    gd = abs(parsed[0] - parsed[1])
+    has_blow = any(
+        (p := parse_score(item)) is not None and abs(p[0] - p[1]) >= 3
+        for item in basket
+    )
+    if gd >= 4 and not has_blow:
+        return "contract_out_blowout"
+    return "in_contract_pack"
+
+
+def route_rma_public(
+    surface: str,
+    actual_1x2: str,
+    scores_basket: Iterable[str],
+    actual_score: str,
+) -> RmaRoute:
+    """对外复盘路由：格子原子，不吃 01「胶着」三向。空槽 skip。"""
+    grid = list(scores_basket)
+    claim = public_allowed_set(surface, grid)
+    if not claim:
+        return RmaRoute.SKIP
+    if actual_1x2 not in claim:
+        return RmaRoute.DIRECTION_REWORK
+    if score_in_basket(actual_score, grid):
+        return RmaRoute.CLOSED
+    return RmaRoute.SCORE_REWORK
+
+
+
 def route_rma(
     research_direction: str,
     actual_1x2: str,
@@ -101,6 +182,29 @@ def _self_check() -> None:
     assert normalize_direction("平 / 客胜并列（90′）") == {"平", "客胜"}
     assert route_rma("平 / 客胜并列（90′）", "主胜", ["1-1", "0-1", "1-0"], "4-0") == RmaRoute.DIRECTION_REWORK
     assert "客胜" in normalize_direction("胶着偏主")
+    # V17.4.22：01「胶着」仍三向；对外格子 1-1/2-1 不得扩成三向
+    assert atoms_from_scores(["1-1", "2-1"]) == {"平", "主胜"}
+    assert public_allowed_set("胶着（1-1 / 2-1）", ["1-1", "2-1"]) == {"平", "主胜"}
+    assert public_allowed_set("锁平", ["1-1", "0-0"]) == {"平"}
+    assert classify_miss("胶着", {"平", "主胜"}, "客胜") == "A"
+    assert classify_miss("胶着偏客", {"客胜", "平"}, "主胜") == "lean_flip"
+    assert classify_miss("锁平", {"平"}, "平") is None
+    assert public_allowed_set("胶着") == set()
+    assert public_allowed_set("胶着偏主") == {"主胜", "平"}
+    assert route_rma_public("胶着（1-1 / 2-1）", "客胜", ["1-1", "2-1"], "1-2") == RmaRoute.DIRECTION_REWORK
+    assert route_rma_public("锁平", "平", ["1-1", "0-0"], "1-1") == RmaRoute.CLOSED
+    # 01 研究入口「胶着」仍三向（不得拿来刷对外）
+    assert route_rma("胶着", "客胜", ["1-1", "2-1"], "1-2") == RmaRoute.SCORE_REWORK
+    # V17.4.22.2：空槽字面不是允许集；带 01 篮也跳过对外分母
+    assert public_allowed_set("空槽") == set()
+    assert public_allowed_set("空槽", ["1-2", "0-2"]) == set()
+    assert route_rma_public("空槽", "客胜", ["1-2", "0-2"], "0-1") == RmaRoute.SKIP
+    assert route_rma_public("空槽", "主胜", [], "1-0") == RmaRoute.SKIP
+    # 08-31 夹具：合同内 miss vs 屠杀合同外
+    assert score_miss_class("0-1", ["1-2", "0-2", "1-1"]) == "in_contract_pack"
+    assert score_miss_class("1-0", ["2-1", "1-1", "0-1"]) == "in_contract_pack"
+    assert score_miss_class("0-4", ["1-2", "0-1", "1-1"]) == "contract_out_blowout"
+    assert score_miss_class("1-0", ["1-1", "1-0"]) is None
     print("OK rma_route self-check")
 
 

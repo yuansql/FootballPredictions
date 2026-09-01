@@ -5,7 +5,7 @@
 公开/研究三格（主/次/防）须：
   分析（双方）→ 方向锁 → 进球档 → 【情景路径】→ **每个比分单独计权** → 取权重 Top3 单格
 收据过闸且反方向 ±1 球叶 ≥τ → **防格绑定该单格**（非套餐；异族只允许这一格）。
-第三与第四单格权重差 <ε → 低结构（只交主+次）。
+第三与第四单格权重差 <ε → 低结构（01 仍可交权重 #3；禁进 TOP2）。
 """
 from __future__ import annotations
 
@@ -48,6 +48,26 @@ def goal_total(score: str) -> int | None:
     if parsed is None:
         return None
     return parsed[0] + parsed[1]
+
+
+def score_class(score: str) -> str | None:
+    """公开格进球族：shutout | two_goal | open。不是 2-1 镜像 1-2。"""
+    parsed = parse_score(score)
+    if parsed is None:
+        return None
+    h, a = parsed
+    total = h + a
+    if min(h, a) == 0:
+        return "shutout"
+    if total <= 3:
+        return "two_goal"
+    return "open"
+
+
+def same_score_class_pair(a: str, b: str) -> bool:
+    ca, cb = score_class(a), score_class(b)
+    return ca is not None and ca == cb
+
 
 
 DRAW_TRAP_TAGS = frozenset({"weld_draw", "manage_tie"})
@@ -251,12 +271,12 @@ def trio_compare(
     w4 = ranked[3][1] if len(ranked) >= 4 else 0.0
     margin = w3 - w4 if len(ranked) >= 4 else w3
 
-    # 不足三格，或第三单格与第四单格权重胶着 → 低结构只交两格
+    # 不足三格，或第三单格与第四单格权重胶着 → 低结构（仍可交权重 #3）
     hint = "low" if len(ranked) < 3 or margin < eps else "high"
-    if hint == "low":
-        best = (ranked[0][0], ranked[1][0])
-    else:
+    if len(ranked) >= 3:
         best = (ranked[0][0], ranked[1][0], ranked[2][0])
+    else:
+        best = (ranked[0][0], ranked[1][0])
 
     return TrioCompareResult(
         ranked_leaves=tuple(ranked),
@@ -266,6 +286,23 @@ def trio_compare(
         margin=margin,
         structure_hint=hint,
     )
+
+
+def _low_third_ok(
+    defense: str,
+    paths: Sequence[PathLeaf] | None,
+    *,
+    eps: float = TRIO_EPS,
+) -> bool:
+    """低结构第三格合法：必须是权重 #3（含与 #3 同权的并列档）。"""
+    if not paths or not parse_score(defense):
+        return False
+    cmp = trio_compare(paths, eps=eps)
+    if cmp is None or len(cmp.ranked_leaves) < 3:
+        return False
+    w3 = cmp.ranked_leaves[2][1]
+    allowed = {s for s, w in cmp.ranked_leaves[2:] if abs(w - w3) < 1e-9}
+    return defense.strip() in allowed
 
 
 def lint_trio_compare(
@@ -589,12 +626,23 @@ def lint_score_geometry(
         )
 
     if structure_tier == "low":
-        if not defense_abstain and defense.strip() and parse_score(defense):
+        third_ok = _low_third_ok(defense, paths, eps=eps)
+        if (
+            not defense_abstain
+            and defense.strip()
+            and parse_score(defense)
+            and not third_ok
+        ):
             issues.append(
-                GeometryIssue("low_tier_scored_defense", "低结构场防应显式弃权，不得第三精确分")
+                GeometryIssue(
+                    "low_tier_scored_defense",
+                    "低结构第三格须是权重 #3（或弃权），不得发明精确分",
+                )
             )
         issues_dir: list[GeometryIssue] = []
-        scored = _scored_slots(main, sub, "")
+        scored = _scored_slots(
+            main, sub, defense if (not defense_abstain and third_ok) else ""
+        )
         if len(scored) >= 2:
             signs = {margin_sign(s) for s in scored}
             win = signs & {-1, 1}
@@ -605,7 +653,10 @@ def lint_score_geometry(
                         "公开三格不得混主胜族与客胜族；异族逃生只写旁注",
                     )
                 )
-        issues_dir.extend(goals_band_ok([main, sub], goals_band))
+        band_slots = [main, sub]
+        if not defense_abstain and third_ok:
+            band_slots.append(defense)
+        issues_dir.extend(goals_band_ok(band_slots, goals_band))
         if defense_abstain and not 旁 and not any(t in tags for t in DRAW_TRAP_TAGS):
             issues_dir.append(
                 GeometryIssue("abstain_without旁", "低结构防弃权时旁注可留 #2 逃生（研究侧）")
@@ -732,6 +783,29 @@ def _self_check() -> None:
         旁="0-1",
     )
     assert not any(i.code == "trio_margin_epsilon" for i in issues), issues
+    # V17.4.22.2：低结构可交权重 #3（并列第三档按名字取 1-0）；弃权仍合法
+    issues = lint_score_geometry(
+        "low",
+        "2-1",
+        "1-0",
+        "1-1",
+        goals_band={1, 2, 3},
+        direction_text="胶着偏主",
+        paths=paths_tie,
+        eps=0.15,
+    )
+    assert not any(i.code == "low_tier_scored_defense" for i in issues), issues
+    issues = lint_score_geometry(
+        "low",
+        "2-1",
+        "1-0",
+        "3-0",
+        goals_band={1, 2, 3},
+        direction_text="胶着偏主",
+        paths=paths_tie,
+        eps=0.15,
+    )
+    assert any(i.code == "low_tier_scored_defense" for i in issues), issues
 
     # 异族逃生进三格 FAIL
     issues = lint_score_geometry(
@@ -831,7 +905,17 @@ def _self_check() -> None:
     )
     assert any(i.code == "anti_echo_no_hedge" for i in issues), issues
 
-    print("OK score_geometry self-check (V17.4.20 单格 Top3 + counter_bind)")
+    # V17.4.22 格子族：1-1/2-1 同族；1-1/0-0 与 2-1/1-0 跨族
+    assert score_class("1-1") == "two_goal"
+    assert score_class("2-1") == "two_goal"
+    assert score_class("0-0") == "shutout"
+    assert score_class("1-0") == "shutout"
+    assert score_class("2-2") == "open"
+    assert same_score_class_pair("1-1", "2-1")
+    assert not same_score_class_pair("1-1", "0-0")
+    assert not same_score_class_pair("2-1", "1-0")
+
+    print("OK score_geometry self-check (V17.4.22.2 低结构可交权重 #3)")
 
 
 if __name__ == "__main__":

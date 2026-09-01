@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""日稿 linter：01 单格 Top3 + counter 防格 + HT/FT + TOP2 闸 + 03 RMA（V17.4.21）。"""
+"""日稿 linter：01 单格 Top3 + counter 防格 + HT/FT + TOP2 闸 + 03 RMA（V17.4.22.2）。"""
 from __future__ import annotations
 
 import argparse
@@ -18,6 +18,7 @@ from receipt_fingerprint import (
     load_ledger,
     shadow_check,
 )
+from rma_route import atoms_from_scores
 from score_geometry import PathLeaf, lint_score_geometry
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +35,7 @@ SIGN_TRIPLE_RE = re.compile(
 BOOK_LABELS = ("对外三场", "01篮", "全表")
 SLOT_RULE_DAY = date(2026, 8, 28)
 BOOK_RULE_DAY = date(2026, 8, 27)
+ATOM_RULE_DAY = date(2026, 8, 31)
 
 SECTION_RE = re.compile(r"^##\s+场次[｜|](.+)$", re.M)
 DIR_SCORE_RE = re.compile(
@@ -71,7 +73,16 @@ HT_PATH_RE = re.compile(r"ht_path[_＝=]?([A-Za-z0-9]+)\s*[=＝]", re.I)
 TOP_BLOCK_RE = re.compile(r"【今晚研究 TOP】(.+?)(?=\n【|\Z)", re.S)
 TOP_LINE_RE = re.compile(r"^([123])[\.、]\s*(.+)$", re.M)
 
-RMA_TABLE_RE = re.compile(r"^\|\s*.+\s*\|\s*direction_rework|score_rework|closed", re.M | re.I)
+RMA_TABLE_RE = re.compile(
+    r"^\|\s*.+\s*\|\s*direction_rework|score_rework|closed|skip", re.M | re.I
+)
+BUDING_RE = re.compile(r"不钉方向")
+LOCK_RE = re.compile(r"锁平|锁主|锁客")
+BESIDE_RE = re.compile(r"放旁边")
+SCORE_TOKEN_RE = re.compile(r"(\d+-\d+)")
+TRUE00_RE = re.compile(r"闷平|TRUE_00|死盒|焊平")
+STEAL_SCORES = frozenset({"0-1", "1-2"})
+WHY_REJECT_RE = re.compile(r"why_reject\s*[=＝]", re.I)
 
 
 def parse_draft_day(path: Path) -> date | None:
@@ -292,6 +303,8 @@ def _lint_section(
         )
     if _needs_receipt(block, direction, weld):
         issues.append(f"{title}: 疑似 {weld} 焊叙事但未写【反剧本收据】（V17.4.15）")
+    if day is not None and day >= ATOM_RULE_DAY:
+        issues.extend(lint_unpinned_home_weld(block, direction, title, pang, paths))
     if OVERCONFIDENT_RE.search(block) and tier == "low":
         issues.append(f"{title}: [overconfident_low_structure] 低结构禁必/铁定口吻")
     if day is not None and day >= SLOT_RULE_DAY and "胶着" in direction:
@@ -384,7 +397,104 @@ def lint_02_nail(day_dir: Path) -> list[str]:
         issues.append(f"{f02.name}: 「钉K场」与「别拿主胜凑席」不得同文（看槽≠钉槽）")
     if f01.is_file() and EMPTY_TOP2_RE.search(f01.read_text(encoding="utf-8")) and NAIL_RE.search(t02):
         issues.append(f"{f02.name}: 01 已宁缺 TOP2，禁止「今晚我钉三场」枚举方向")
+    issues.extend(lint_02_atom_text(t02) if day >= ATOM_RULE_DAY else [])
     return issues
+
+
+def _plain_02(text: str) -> str:
+    t = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
+    t = re.sub(r"<[^>]+>", " ", t)
+    return t.replace("**", " ")
+
+
+def surface_1x2_tokens(window: str) -> set[str]:
+    """句面 1X2。排除主队/客队；放旁边只认紧贴的主/客。"""
+    t = window.replace("主队", "\u0000").replace("客队", "\u0000")
+    out: set[str] = set()
+    if "锁平" in t:
+        out.add("平")
+    if "锁主" in t or "主胜" in t:
+        out.add("主胜")
+    if "锁客" in t or "客胜" in t:
+        out.add("客胜")
+    for m in BESIDE_RE.finditer(t):
+        prefix = t[max(0, m.start() - 8) : m.start()]
+        if "客" in prefix:
+            out.add("客胜")
+        if "主" in prefix:
+            out.add("主胜")
+    return out
+
+
+def _lock_draw_ok(window: str, scores: list[str]) -> bool:
+    if "0-0" in scores:
+        return True
+    return bool(TRUE00_RE.search(window))
+
+
+def lint_unpinned_home_weld(
+    block: str,
+    direction: str,
+    title: str,
+    pang: str | None,
+    paths: list[PathLeaf],
+) -> list[str]:
+    """V17.4.22.1：主胜防平 + 页上客胜偷球格 ⇒ 须活收据。胶着 scout 不触发。"""
+    if "胶着" in direction:
+        return []
+    pub = ""
+    rm = re.search(r"胜平负[：:]\s*([^\n｜]+)", block)
+    if rm:
+        pub = rm.group(1)
+    blob = f"{direction} {pub}"
+    if "主胜" not in blob or "防平" not in blob:
+        return []
+    steal: set[str] = set()
+    if pang in STEAL_SCORES:
+        steal.add(pang)
+    steal.update(p.score for p in paths if p.score in STEAL_SCORES)
+    for m in re.finditer(r"旁挂[^\n]{0,40}", block):
+        steal.update(s for s in SCORE_TOKEN_RE.findall(m.group(0)) if s in STEAL_SCORES)
+    if not steal:
+        return []
+    cm = COUNTER_DIR_RE.search(block)
+    counter = cm.group(1).strip() if cm else ""
+    live = any(m in block for m in RECEIPT_MARKERS) and (
+        "客胜" in counter or bool(WHY_REJECT_RE.search(block))
+    )
+    if live:
+        return []
+    return [
+        f"{title}: 主胜防平且页上有客胜偷球 {sorted(steal)}，"
+        "须活【反剧本收据】（counter_direction=客胜 / why_reject 点名该偷）"
+    ]
+
+
+def lint_02_atom_text(text: str) -> list[str]:
+    """V17.4.22.1：空槽合法；有锁则一原子；禁放旁边；锁平须 0-0/闷平。"""
+    plain = _plain_02(text)
+    issues: list[str] = []
+    for i, m in enumerate(BUDING_RE.finditer(plain), start=1):
+        window = plain[m.start() : m.start() + 320]
+        if BESIDE_RE.search(window):
+            issues.append(f"02 不钉#{i}: 禁止「放旁边」当第三向")
+        scores = SCORE_TOKEN_RE.findall(window)[:2]
+        atoms = atoms_from_scores(scores)
+        claimed = surface_1x2_tokens(window) | atoms
+        if len(scores) >= 2 and len(atoms) != 1:
+            issues.append(
+                f"02 不钉#{i}: 两格 {scores[0]}/{scores[1]} 并集={atoms}，禁止刷两个 1X2"
+            )
+        elif len(claimed) > 1:
+            issues.append(
+                f"02 不钉#{i}: 句面+格子 1X2={claimed}，须单例（升锁或划场）"
+            )
+        if "锁平" in window and not _lock_draw_ok(window, scores):
+            issues.append(
+                f"02 不钉#{i}: 锁平须含 0-0 或闷平/TRUE_00/死盒/焊平，犹豫不是平"
+            )
+    return issues
+
 
 
 def lint_03(path: Path) -> list[str]:
@@ -423,12 +533,58 @@ def _self_check() -> None:
     assert not lint_03_books(
         "方向 1/3\n对外三场\n01篮\n全表9场", date(2026, 8, 27), "x.md"
     )
-    assert not lint_03_books("方向 1/3", date(2026, 8, 15), "x.md")
+    if not lint_03_books("方向 1/3", date(2026, 8, 15), "x.md"):
+        pass
+    else:
+        raise AssertionError("pre-book-day should skip")
+    vacant = lint_02_atom_text("这场我不钉方向。上下半场另说，今晚不锁 1X2。")
+    assert vacant == [], vacant
+    mixed = lint_02_atom_text(
+        "这场我不钉方向。比分心里更近**1-1** 和 **2-1**，客胜放旁边。"
+    )
+    assert any("放旁边" in x for x in mixed), mixed
+    assert any("并集" in x or "1X2" in x for x in mixed), mixed
+    assert not any("须写锁" in x for x in mixed), mixed
+    napoli = lint_02_atom_text(
+        "这场我不钉方向。锁平。比分心里更近**1-1** 和 **0-0**，客胜放旁边。"
+    )
+    assert any("放旁边" in x or "句面" in x or "单例" in x for x in napoli), napoli
+    lock_no_true00 = lint_02_atom_text(
+        "这场我不钉方向。锁平。比分心里更近**1-1** 和 **2-2**。"
+    )
+    assert any("闷平" in x or "TRUE_00" in x or "0-0" in x for x in lock_no_true00), (
+        lock_no_true00
+    )
+    good = lint_02_atom_text(
+        "这场我不钉方向。锁平。比分心里更近**1-1** 和 **0-0**。"
+    )
+    assert good == [], good
+    good_away = lint_02_atom_text(
+        "这场我不钉方向。锁客。比分心里更近**1-2** 和 **0-1**。"
+    )
+    assert good_away == [], good_away
+    good_shutout = lint_02_atom_text(
+        "这场我不钉方向。锁客。比分心里更近**0-2** 和 **0-1**。"
+    )
+    assert good_shutout == [], good_shutout
+    good_home = lint_02_atom_text(
+        "这场我不钉方向。锁主。比分心里更近**2-1** 和 **1-0**。"
+    )
+    assert good_home == [], good_home
+    steal_home = """**方向｜比分**：主胜（防平）｜**2-1** 主推 / **1-1** 次 / 防：**弃权**（旁挂 **0-1**）
+path_D = 偷 ｜ weight = 0.15 ｜ 终场 = 0-1
+"""
+    steal_iss, _ = _lint_section(steal_home, "塞尔塔", day=ATOM_RULE_DAY)
+    assert any("收据" in x or "不钉锁主" in x or "偷球" in x for x in steal_iss), steal_iss
+    scout = """**方向｜比分**：胶着偏主｜**2-1** 主推 / **1-1** 次 / 防：**弃权**（旁挂 **0-1**）
+"""
+    scout_iss, _ = _lint_section(scout, "胶着scout", day=ATOM_RULE_DAY)
+    assert not any("偷球" in x or "不钉锁主" in x for x in scout_iss), scout_iss
     print("OK lint_draft self-check")
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Lint toutiao drafts for V17.4.21 hooks")
+    ap = argparse.ArgumentParser(description="Lint toutiao drafts for V17.4.22.2 hooks")
     ap.add_argument("path", nargs="?", help="01.md / 03.md / YYYY-MM-DD 日夹")
     ap.add_argument("--warn-only", action="store_true", help="只打印，exit 0")
     args = ap.parse_args()

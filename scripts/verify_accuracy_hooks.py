@@ -45,6 +45,15 @@ def main() -> int:
         "钉槽",
         "符号三元组",
         "三本账",
+        "V17.4.22",
+        "一原子",
+        "空槽",
+        "TRUE_00",
+        "格子族",
+        "V17.4.22.2",
+        "skip",
+        "合同外",
+        "score_miss_class",
     ):
         if phrase not in skill:
             print(f"FAIL SKILL missing {phrase}")
@@ -56,7 +65,7 @@ def main() -> int:
         print("FAIL SKILL must ban 三格套餐/组合")
         return 1
 
-    print("PASS V17.4.21 accuracy hooks (RMA + nail-slot + books + sign triple)")
+    print("PASS V17.4.22.2 accuracy hooks (vacant skip + contract-out miss + low-tier #3)")
     return 0
 
 
