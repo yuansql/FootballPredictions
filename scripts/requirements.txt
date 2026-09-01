@@ -1,0 +1,6 @@
+# Phase A 最小依赖
+jsonschema>=4.0.0
+
+# Phase B 扩展依赖（后续启用）
+# pandas>=2.0.0
+# pyyaml>=6.0.0

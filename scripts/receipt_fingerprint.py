@@ -117,6 +117,10 @@ def counter_hit_shadow_check(
             reason=f"指纹 {key} 已 counter_hit {hits} 次（TOP2 live 拦）",
         )
     return ShadowVerdict(would_demote=False, match_count=hits, reason="ok")
+
+
+def append_fingerprint(path: Path, row: dict) -> None:
+    """Append a fingerprint row to the ledger, creating parent dirs if needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")

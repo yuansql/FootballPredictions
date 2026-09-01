@@ -1,0 +1,144 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Football Prediction Log Row",
+  "description": "Canonical append-only log row for football-predict-v17/V18. One row per fixture per prediction run.",
+  "type": "object",
+  "required": [
+    "run_id",
+    "date",
+    "match",
+    "schema_version",
+    "skill_version"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "Unique run identifier, e.g. 20260803-001-session"
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^20\\d{2}-\\d{2}-\\d{2}$",
+      "description": "Match date in YYYY-MM-DD"
+    },
+    "match": {
+      "type": "string",
+      "description": "Match label, e.g. 塞伊奈 vs 赫尔辛基"
+    },
+    "league": {
+      "type": "string",
+      "description": "League name, e.g. 芬超"
+    },
+    "fixture_code": {
+      "type": "string",
+      "description": "Optional fixture code, e.g. 001"
+    },
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version of this row, e.g. 1.0.0"
+    },
+    "skill_version": {
+      "type": "string",
+      "description": "Active skill version, e.g. V17.4.22.2 or V18"
+    },
+    "intel_slots": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of intelligence slots used (伤停, 战意, 赛程, H2H, etc.)"
+    },
+    "pre_match": {
+      "type": "object",
+      "description": "All information available before kickoff",
+      "properties": {
+        "research_direction": {
+          "type": "string",
+          "description": "01 research direction text, may include 胶着/并列"
+        },
+        "public_claim": {
+          "type": "string",
+          "description": "02 public surface text or 空槽"
+        },
+        "scores_basket": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^\\d+-\\d+$" },
+          "description": "Public score basket (main/sub/defense or up to 3 weights)"
+        },
+        "goals_band": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "Expected goals band, e.g. [2, 3]"
+        },
+        "receipt": {
+          "type": "object",
+          "description": "Anti-narrative receipt if a weld tag is used",
+          "properties": {
+            "weld_tag": { "type": "string" },
+            "counter_direction": { "type": "string" },
+            "counter_one_liner": { "type": "string" },
+            "why_reject": { "type": "string" },
+            "clause_id": { "type": "string" }
+          }
+        },
+        "edge_raw_pct": { "type": ["number", "null"] },
+        "edge_eff_pct": { "type": ["number", "null"] },
+        "channel": {
+          "type": "string",
+          "description": "Ticket channel: 胜平负 / 让球 / 进球数 / 不荐"
+        },
+        "ticket_recommendation": {
+          "type": "string",
+          "description": "Final ticket text, e.g. 不荐 or a specific play"
+        },
+        "p_model": { "type": ["number", "null"] },
+        "lambda": {
+          "type": "array",
+          "items": { "type": "number" }
+        }
+      }
+    },
+    "post_match": {
+      "type": "object",
+      "description": "Information filled after the match ends",
+      "properties": {
+        "actual_score": {
+          "type": "string",
+          "pattern": "^\\d+[-:]\\d+$",
+          "description": "Actual match score, e.g. 2-1 or 2:1"
+        },
+        "actual_1x2": {
+          "type": "string",
+          "enum": ["主胜", "平", "客胜"],
+          "description": "Actual 1X2 outcome"
+        },
+        "rma_route": {
+          "type": "string",
+          "enum": ["direction_rework", "score_rework", "closed", "skip"],
+          "description": "RMA dual-bay routing result"
+        },
+        "score_miss_class": {
+          "type": ["string", "null"],
+          "enum": ["in_contract_pack", "contract_out_blowout", null],
+          "description": "Score miss classification"
+        },
+        "fingerprint": {
+          "type": "object",
+          "description": "Receipt fingerprint for direction misses",
+          "properties": {
+            "weld_tag": { "type": "string" },
+            "clause_id": { "type": "string" },
+            "counter_direction": { "type": "string" },
+            "intel_slot_shape": { "type": "string" }
+          }
+        }
+      }
+    },
+    "config_hashes": {
+      "type": "object",
+      "description": "Hashes of active configuration at prediction time",
+      "properties": {
+        "skill": { "type": "string" },
+        "thresholds": { "type": "string" },
+        "patches": { "type": "string" }
+      }
+    }
+  }
+}

@@ -19,6 +19,7 @@ from receipt_fingerprint import (
     shadow_check,
 )
 from rma_route import atoms_from_scores
+from rule_tools import ReceiptRuleTool, REGISTRY
 from score_geometry import PathLeaf, lint_score_geometry
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -103,6 +104,11 @@ class SectionMeta:
     clause_id: str
     counter_direction: str
     n_paths: int
+    rule_verdicts: list[dict] = None
+
+    def __post_init__(self):
+        if self.rule_verdicts is None:
+            self.rule_verdicts = []
 
 
 def _guess_weld_tag(block: str, direction: str) -> str | None:
@@ -322,6 +328,15 @@ def _lint_section(
             f"{title}: [continuation_guest] 同址客刚赢：研究星封顶★★★、默认不进 TOP2"
             "（除非客上轮净胜≤1 且主核心缺阵≥2）"
         )
+    # Phase A: instrument with RuleTool PoC (receipt rule)
+    rule_tool = ReceiptRuleTool()
+    rv = rule_tool.run(
+        {"block": block, "direction": direction, "weld_tag": weld}
+    )
+    rule_verdicts = [rv.__dict__]
+    if rv.verdict in ("FORBID", "FLAG") and rv.message:
+        issues.append(f"{title}: [RuleTool:{rv.rule_id}] {rv.message}")
+
     meta = SectionMeta(
         title=title,
         block=block,
@@ -331,6 +346,7 @@ def _lint_section(
         clause_id=clause_id,
         counter_direction=counter_direction,
         n_paths=len(paths),
+        rule_verdicts=rule_verdicts,
     )
     return issues, meta
 
