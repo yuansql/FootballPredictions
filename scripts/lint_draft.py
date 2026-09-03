@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""日稿 linter：01 单格 Top3 + counter 防格 + HT/FT + TOP2 闸 + 03 RMA（V17.4.22.2）。"""
+"""日稿 linter：01 单格 Top3 + counter 防格 + HT/FT + TOP2 闸 + 03 RMA（V17.4.22.3）。"""
 from __future__ import annotations
 
 import argparse
@@ -37,6 +37,7 @@ BOOK_LABELS = ("对外三场", "01篮", "全表")
 SLOT_RULE_DAY = date(2026, 8, 28)
 BOOK_RULE_DAY = date(2026, 8, 27)
 ATOM_RULE_DAY = date(2026, 8, 31)
+DIR_MUST_DAY = date(2026, 9, 2)
 
 SECTION_RE = re.compile(r"^##\s+场次[｜|](.+)$", re.M)
 DIR_SCORE_RE = re.compile(
@@ -79,6 +80,9 @@ RMA_TABLE_RE = re.compile(
 )
 BUDING_RE = re.compile(r"不钉方向")
 LOCK_RE = re.compile(r"锁平|锁主|锁客")
+DIR_ATOM_RE = re.compile(r"主不败|客不败|锁主|锁客|锁平")
+VACANT_02_RE = re.compile(r"空槽|方向空着|不锁\s*1X2")
+SCORE_ABSTAIN_RE = re.compile(r"比分弃权|不写比分|比分\s*[：:]\s*[—\-]")
 BESIDE_RE = re.compile(r"放旁边")
 SCORE_TOKEN_RE = re.compile(r"(\d+-\d+)")
 TRUE00_RE = re.compile(r"闷平|TRUE_00|死盒|焊平")
@@ -171,6 +175,24 @@ def _guess_structure(direction: str, block: str) -> str:
     if "结构档=low" in block or "结构档＝low" in block:
         return "low"
     return "high"
+
+
+def _has_direction_atom(direction: str) -> bool:
+    if "胶着" in direction:
+        return False
+    if DIR_ATOM_RE.search(direction):
+        return True
+    return bool(re.search(r"主胜|客胜|平局", direction))
+
+
+def _lint_dir_must(direction: str, title: str, day: date | None) -> list[str]:
+    if day is None or day < DIR_MUST_DAY:
+        return []
+    if "胶着" in direction:
+        return [f"{title}: 禁用胶着，改主不败/客不败或锁主/锁客/锁平"]
+    if not _has_direction_atom(direction):
+        return [f"{title}: 方向必须给（锁* 或 主不败/客不败）"]
+    return []
 
 
 def _parse_paths(block: str) -> list[PathLeaf]:
@@ -272,10 +294,16 @@ def _lint_section(
         issues.append(f"{title}: 缺 **方向｜比分** 行")
         return issues, None
     direction, tail = m.group(1).strip(), m.group(2).strip()
+    issues.extend(_lint_dir_must(direction, title, day))
     main, sub, defense, pang = _split_scores(tail)
+    score_abstain = bool(SCORE_ABSTAIN_RE.search(tail) or SCORE_ABSTAIN_RE.search(block))
     if not main:
-        issues.append(f"{title}: 未解析到主推比分")
-        return issues, None
+        if day is not None and day >= DIR_MUST_DAY and score_abstain:
+            if not _parse_goals_band(block) and "进球数" not in block:
+                issues.append(f"{title}: 比分弃权须写进球数")
+        else:
+            issues.append(f"{title}: 未解析到主推比分")
+            return issues, None
     abstain = "弃权" in tail or "防：弃权" in tail or "防:**弃权" in block
     tier = _guess_structure(direction, block)
     weld = _guess_weld_tag(block, direction)
@@ -286,34 +314,40 @@ def _lint_section(
     counter_direction = cm.group(1).strip() if cm else ""
     cl = CLAUSE_RE.search(block)
     clause_id = cl.group(1).strip() if cl else ""
-    geo = lint_score_geometry(
-        tier,
-        main,
-        sub or main,
-        "弃权" if abstain else (defense or sub or main),
-        旁=pang,
-        direction_tags=tags,
-        defense_abstain=abstain,
-        goals_band=band,
-        direction_text=direction,
-        paths=paths or None,
-        require_paths=False,
-        counter_direction=counter_direction,
-    )
-    for g in geo:
-        issues.append(f"{title}: [{g.code}] {g.message}")
-    if tier == "high" and not paths:
-        issues.append(
-            f"{title}: [missing_scenario_paths] 高结构建议写【情景路径】"
-            "（weight｜终场）供单格权重排序（V17.4.20 warn）"
+    if main:
+        geo = lint_score_geometry(
+            tier,
+            main,
+            sub or main,
+            "弃权" if abstain else (defense or sub or main),
+            旁=pang,
+            direction_tags=tags,
+            defense_abstain=abstain,
+            goals_band=band,
+            direction_text=direction,
+            paths=paths or None,
+            require_paths=False,
+            counter_direction=counter_direction,
         )
+        for g in geo:
+            issues.append(f"{title}: [{g.code}] {g.message}")
+        if tier == "high" and not paths:
+            issues.append(
+                f"{title}: [missing_scenario_paths] 高结构建议写【情景路径】"
+                "（weight｜终场）供单格权重排序（V17.4.20 warn）"
+            )
     if _needs_receipt(block, direction, weld):
         issues.append(f"{title}: 疑似 {weld} 焊叙事但未写【反剧本收据】（V17.4.15）")
     if day is not None and day >= ATOM_RULE_DAY:
         issues.extend(lint_unpinned_home_weld(block, direction, title, pang, paths))
     if OVERCONFIDENT_RE.search(block) and tier == "low":
         issues.append(f"{title}: [overconfident_low_structure] 低结构禁必/铁定口吻")
-    if day is not None and day >= SLOT_RULE_DAY and "胶着" in direction:
+    if (
+        day is not None
+        and day >= SLOT_RULE_DAY
+        and day < DIR_MUST_DAY
+        and "胶着" in direction
+    ):
         rm = re.search(r"胜平负[：:]\s*([^\n｜]+)", block)
         if rm:
             pub = rm.group(1)
@@ -414,6 +448,7 @@ def lint_02_nail(day_dir: Path) -> list[str]:
     if f01.is_file() and EMPTY_TOP2_RE.search(f01.read_text(encoding="utf-8")) and NAIL_RE.search(t02):
         issues.append(f"{f02.name}: 01 已宁缺 TOP2，禁止「今晚我钉三场」枚举方向")
     issues.extend(lint_02_atom_text(t02) if day >= ATOM_RULE_DAY else [])
+    issues.extend(lint_02_must_direction(t02, day))
     return issues
 
 
@@ -427,6 +462,10 @@ def surface_1x2_tokens(window: str) -> set[str]:
     """句面 1X2。排除主队/客队；放旁边只认紧贴的主/客。"""
     t = window.replace("主队", "\u0000").replace("客队", "\u0000")
     out: set[str] = set()
+    if "主不败" in t:
+        return {"主胜", "平"}
+    if "客不败" in t:
+        return {"客胜", "平"}
     if "锁平" in t:
         out.add("平")
     if "锁主" in t or "主胜" in t:
@@ -487,7 +526,7 @@ def lint_unpinned_home_weld(
 
 
 def lint_02_atom_text(text: str) -> list[str]:
-    """V17.4.22.1：空槽合法；有锁则一原子；禁放旁边；锁平须 0-0/闷平。"""
+    """V17.4.22.1：空槽合法（旧稿）；有锁则一原子；4.22.3 主不败/客不败可两向。"""
     plain = _plain_02(text)
     issues: list[str] = []
     for i, m in enumerate(BUDING_RE.finditer(plain), start=1):
@@ -497,7 +536,17 @@ def lint_02_atom_text(text: str) -> list[str]:
         scores = SCORE_TOKEN_RE.findall(window)[:2]
         atoms = atoms_from_scores(scores)
         claimed = surface_1x2_tokens(window) | atoms
-        if len(scores) >= 2 and len(atoms) != 1:
+        dc_home = "主不败" in window
+        dc_away = "客不败" in window
+        if dc_home:
+            extra = atoms - {"主胜", "平"}
+            if extra:
+                issues.append(f"02 不钉#{i}: 主不败篮不得含 {extra}")
+        elif dc_away:
+            extra = atoms - {"客胜", "平"}
+            if extra:
+                issues.append(f"02 不钉#{i}: 客不败篮不得含 {extra}")
+        elif len(scores) >= 2 and len(atoms) != 1:
             issues.append(
                 f"02 不钉#{i}: 两格 {scores[0]}/{scores[1]} 并集={atoms}，禁止刷两个 1X2"
             )
@@ -509,6 +558,25 @@ def lint_02_atom_text(text: str) -> list[str]:
             issues.append(
                 f"02 不钉#{i}: 锁平须含 0-0 或闷平/TRUE_00/死盒/焊平，犹豫不是平"
             )
+    return issues
+
+
+def lint_02_must_direction(text: str, day: date | None) -> list[str]:
+    """V17.4.22.3：认真拆的场必须给方向原子；禁胶着、禁空槽。"""
+    if day is None or day < DIR_MUST_DAY:
+        return []
+    plain = _plain_02(text)
+    issues: list[str] = []
+    if "胶着" in plain:
+        issues.append("02: 禁用胶着")
+    if VACANT_02_RE.search(plain):
+        issues.append("02: 方向必须给，禁止空槽/方向空着")
+    n_fields = len(re.findall(r"上半场剧本", plain))
+    n_dir = len(DIR_ATOM_RE.findall(plain))
+    if n_fields and n_dir < n_fields:
+        issues.append(
+            f"02: 认真拆 {n_fields} 场，方向原子 {n_dir}（须主不败/客不败/锁*）"
+        )
     return issues
 
 
@@ -596,11 +664,37 @@ path_D = 偷 ｜ weight = 0.15 ｜ 终场 = 0-1
 """
     scout_iss, _ = _lint_section(scout, "胶着scout", day=ATOM_RULE_DAY)
     assert not any("偷球" in x or "不钉锁主" in x for x in scout_iss), scout_iss
+    dc_ok = lint_02_atom_text(
+        "这场我不钉方向。主不败。比分心里更近**1-0** 和 **1-1**。"
+    )
+    assert dc_ok == [], dc_ok
+    dc_bad = lint_02_atom_text(
+        "这场我不钉方向。主不败。比分心里更近**1-0** 和 **0-1**。"
+    )
+    assert any("主不败" in x for x in dc_bad), dc_bad
+    vacant_new = lint_02_must_direction(
+        "上半场剧本：客队先压。这场方向空着，不锁 1X2。", DIR_MUST_DAY
+    )
+    assert any("方向必须给" in x or "空槽" in x or "空着" in x for x in vacant_new), (
+        vacant_new
+    )
+    ok_dir = lint_02_must_direction(
+        "上半场剧本：主队先顶。这场主不败。", DIR_MUST_DAY
+    )
+    assert ok_dir == [], ok_dir
+    jiao_new, _ = _lint_section(scout, "胶着scout", day=DIR_MUST_DAY)
+    assert any("胶着" in x for x in jiao_new), jiao_new
+    abstain = """**方向｜比分**：客不败｜比分弃权
+研究 ★★★☆☆｜胜平负：客不败｜进球数：一至三球
+"""
+    ab_iss, ab_meta = _lint_section(abstain, "弃权场", day=DIR_MUST_DAY)
+    assert ab_meta is not None
+    assert not any("未解析到主推比分" in x for x in ab_iss), ab_iss
     print("OK lint_draft self-check")
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Lint toutiao drafts for V17.4.22.2 hooks")
+    ap = argparse.ArgumentParser(description="Lint toutiao drafts for V17.4.22.3 hooks")
     ap.add_argument("path", nargs="?", help="01.md / 03.md / YYYY-MM-DD 日夹")
     ap.add_argument("--warn-only", action="store_true", help="只打印，exit 0")
     args = ap.parse_args()

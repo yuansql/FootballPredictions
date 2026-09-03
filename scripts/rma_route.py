@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""RMA 双仓路由：方向返修 vs 比分返修（V17.4.16 · 对外入口 V17.4.22.2 空槽 skip）。"""
+"""RMA 双仓路由：方向返修 vs 比分返修（V17.4.16 · 对外 4.22.3 方向必给）。"""
 from __future__ import annotations
 
 import re
@@ -12,7 +12,7 @@ class RmaRoute(str, Enum):
     DIRECTION_REWORK = "direction_rework"
     SCORE_REWORK = "score_rework"
     CLOSED = "closed"
-    SKIP = "skip"  # 空槽 / 无对外 claim：不进分母，不是 direction miss
+    SKIP = "skip"  # 仅遗留空槽：不进分母。4.22.3 起新稿禁止空槽
 
 
 _SCORE_RE = re.compile(r"^\s*(\d+)\s*[-:：]\s*(\d+)\s*$")
@@ -36,24 +36,25 @@ def outcome_1x2(home: int, away: int) -> str:
 def normalize_direction(text: str) -> set[str]:
     """解析研究/对外方向允许集。
 
-    「胶着」= 三向（只用于 01 研究句）。「并列」只并所写的边（平/客胜并列 ≠ 主胜）。
-    对外对账必须喂 02 句面，禁止把 01「胶着偏x」冒充对外方向。
+    4.22.3：主不败={主,平}，客不败={客,平}。禁止用裸「不败」两边都加。
+    「胶着」仍三向——只为读旧 01；新稿 lint 禁写。
+    「并列」只并所写的边。
     """
     t = text.strip()
+    if "主不败" in t:
+        return {"主胜", "平"}
+    if "客不败" in t:
+        return {"客胜", "平"}
     out: set[str] = set()
     if "胶着" in t:
         out.update({"主胜", "平", "客胜"})
         return out
-    if "主胜" in t or "主" in t.split("（")[0]:
+    if "主胜" in t or "锁主" in t:
         out.add("主胜")
-    if "客胜" in t or "客" in t.split("（")[0]:
+    if "客胜" in t or "锁客" in t:
         out.add("客胜")
-    if "平" in t:
+    if "锁平" in t or ( "平" in t and "防平" not in t):
         out.add("平")
-    if "客不败" in t or "不败" in t:
-        out.update({"平", "客胜"})
-    if "主不败" in t:
-        out.update({"主胜", "平"})
     if not out and t:
         out.add(t)
     return out
@@ -86,7 +87,7 @@ def atoms_from_scores(scores: Iterable[str]) -> set[str]:
 
 
 def public_allowed_set(surface: str, grid: Sequence[str] | None = None) -> set[str]:
-    """对外方向允许集：只认格子/锁，禁止把「胶着」扩成三向。空槽=∅（不理 01 篮）。"""
+    """对外方向允许集。4.22.3：主不败/客不败/锁* 先于格子；空槽仍 ∅（旧稿）。"""
     t = (surface or "").strip()
     if "锁平" in t:
         return {"平"}
@@ -94,6 +95,10 @@ def public_allowed_set(surface: str, grid: Sequence[str] | None = None) -> set[s
         return {"主胜"}
     if "锁客" in t:
         return {"客胜"}
+    if "主不败" in t:
+        return {"主胜", "平"}
+    if "客不败" in t:
+        return {"客胜", "平"}
     if "空槽" in t:
         return set()
     atoms = atoms_from_scores(grid or [])
@@ -142,13 +147,15 @@ def route_rma_public(
     scores_basket: Iterable[str],
     actual_score: str,
 ) -> RmaRoute:
-    """对外复盘路由：格子原子，不吃 01「胶着」三向。空槽 skip。"""
+    """对外复盘路由。无比分篮且方向命中 → closed（比分弃权不计比分仓）。"""
     grid = list(scores_basket)
     claim = public_allowed_set(surface, grid)
     if not claim:
         return RmaRoute.SKIP
     if actual_1x2 not in claim:
         return RmaRoute.DIRECTION_REWORK
+    if not grid:
+        return RmaRoute.CLOSED
     if score_in_basket(actual_score, grid):
         return RmaRoute.CLOSED
     return RmaRoute.SCORE_REWORK
@@ -205,6 +212,16 @@ def _self_check() -> None:
     assert score_miss_class("1-0", ["2-1", "1-1", "0-1"]) == "in_contract_pack"
     assert score_miss_class("0-4", ["1-2", "0-1", "1-1"]) == "contract_out_blowout"
     assert score_miss_class("1-0", ["1-1", "1-0"]) is None
+    # V17.4.22.3：主不败不得被「不败」扩成三向
+    assert normalize_direction("主不败") == {"主胜", "平"}
+    assert normalize_direction("客不败") == {"客胜", "平"}
+    assert public_allowed_set("主不败") == {"主胜", "平"}
+    assert public_allowed_set("客不败", ["0-1", "1-1"]) == {"客胜", "平"}
+    assert route_rma_public("主不败", "主胜", [], "4-2") == RmaRoute.CLOSED
+    assert route_rma_public("主不败", "客胜", [], "0-1") == RmaRoute.DIRECTION_REWORK
+    assert route_rma_public("主不败", "主胜", ["1-0", "1-1"], "2-0") == RmaRoute.SCORE_REWORK
+    assert route_rma_public("客不败", "平", ["1-1", "0-1"], "1-1") == RmaRoute.CLOSED
+    assert route_rma("主不败", "客胜", ["1-0", "1-1"], "0-1") == RmaRoute.DIRECTION_REWORK
     print("OK rma_route self-check")
 
 

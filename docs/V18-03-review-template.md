@@ -26,7 +26,7 @@
 
 | 场 | 推方向（02 句面） | 实际 1X2 | 推比分篮 | 实际比分 | RMA | 方向子标签 | score_miss_class | fingerprint（方向 miss 时填） |
 |---|---|---|---|---|---|---|---|---|
-| … | 锁平 \| 锁主 \| 锁客 \| 空槽 \| 两格… | 主胜/平/客胜 | 主/次/防/旁 | x-y | `direction_rework` \| `score_rework` \| `closed` \| `skip` | `counter_hit` \| `weld_ok` \| `weld_failure` \| — | `in_contract_pack` \| `contract_out_blowout` \| — | `{weld_tag, clause_id, counter_direction, intel_slot_shape}` |
+| … | 锁平 \| 锁主 \| 锁客 \| 主不败 \| 客不败 \| （旧稿空槽） | 主胜/平/客胜 | 主/次/防/旁/弃权 | x-y | `direction_rework` \| `score_rework` \| `closed` \| `skip` | `counter_hit` \| `weld_ok` \| `weld_failure` \| — | `in_contract_pack` \| `contract_out_blowout` \| — | `{weld_tag, clause_id, counter_direction, intel_slot_shape}` |
 
 **RMA 路由规则**（由 `scripts/rma_route.py` 判定）：
 
@@ -37,9 +37,9 @@
 
 **对外入口口径**：
 
-- 方向喂 `02` 句面 / `public_allowed_set`；句面「空槽」**不理 01 篮**。
-- **并列 ≠ 三向**；禁止用 `01`「胶着」刷对外方向命中。
-- 有格子只认格子；句面锁平/锁主/锁客。
+- 方向喂 `02` 句面 / `public_allowed_set`；旧稿「空槽」**不理 01 篮**（`skip`）。新稿禁空槽、禁胶着。
+- **并列 ≠ 三向**；禁止用旧稿 `01`「胶着」刷对外方向命中。
+- 有格子只认格子；句面锁平/锁主/锁客/主不败/客不败。
 
 **方向仓 miss 带焊标签时**：追加写入 `data/miss_fingerprint_ledger.jsonl` 与 `data/fingerprint_db.jsonl`，供 shadow 闸与热力图。
 
@@ -51,7 +51,7 @@
 
 | 分母 | 方向 | 精确比分 | 口径说明 |
 |---|---|---|---|
-| **对外三场** | a/3 | b/3 | `02` 句面；三格不含旁；空槽=skip 不计分母 |
+| **对外三场** | a/3 | b/3 | `02` 句面；三格不含旁；旧空槽=skip 不计分母 |
 | **01 篮** | … | … | 方向用 `02`（胶着不算命中）；比分含 `01` 旁挂 |
 | **全表** | … | … | 当日全部场次；滚动窗不是合同 |
 

@@ -51,6 +51,9 @@ def main() -> int:
         "TRUE_00",
         "格子族",
         "V17.4.22.2",
+        "V17.4.22.3",
+        "主不败",
+        "方向必须给",
         "skip",
         "合同外",
         "score_miss_class",
@@ -65,7 +68,7 @@ def main() -> int:
         print("FAIL SKILL must ban 三格套餐/组合")
         return 1
 
-    print("PASS V17.4.22.2 accuracy hooks (vacant skip + contract-out miss + low-tier #3)")
+    print("PASS V17.4.22.3 accuracy hooks (direction required + 主不败/客不败 + score abstain)")
     return 0
 
 

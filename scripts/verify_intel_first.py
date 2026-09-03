@@ -49,13 +49,24 @@ REQUIRED_PHRASES = {
         "进球数",
         "比分",
     ],
-    "球赛预测框架.txt": ["[INTEL_FIRST", "球队叙事优先", "[STAR_RATING", "【研究推荐】", "V17.4.9"],
+    "球赛预测框架.txt": [
+        "[INTEL_FIRST",
+        "球队叙事优先",
+        "[STAR_RATING",
+        "【研究推荐】",
+        "V17.4.9",
+        "V17.4.22.3",
+        "主不败",
+        "禁止胶着",
+    ],
     "投注分析专家_人设提示词.txt": [
         "INTEL_FIRST",
         "你先讲球，再谈票",
         "【情报叙事】",
         "【研究推荐】",
         "V17.4.9",
+        "主不败",
+        "禁止胶着",
     ],
     "外部模型启动卡.txt": [
         "INTEL_FIRST",
@@ -65,6 +76,7 @@ REQUIRED_PHRASES = {
         "已废除",
         "【研究推荐】",
         "V17.4.9",
+        "主不败",
     ],
     "完整样例_体彩默认.txt": [
         "【情报叙事】",
@@ -75,6 +87,24 @@ REQUIRED_PHRASES = {
     ],
     "使用.md": ["INTEL_FIRST", "V17.4.9", "精简包", "已废除", "双轨推荐"],
     "README.md": ["V17.4.9", "精简包", "双轨推荐"],
+}
+
+# V17.4.22.3：每次必读的框架原文不得再禁不败、把胶着当方向出口
+DIRECTION_STALE_MUST_ABSENT = {
+    "球赛预测框架.txt": [
+        "禁止用不败代替",
+        "只写单选：主胜 / 客胜 / 平局 / 胶着",
+    ],
+    "投注分析专家_人设提示词.txt": [
+        "方向单选：主胜 / 客胜 / 平局 / 胶着",
+    ],
+    "外部模型启动卡.txt": [
+        "方向=主胜|客胜|平局|胶着",
+    ],
+    "p_model手算.txt": [
+        "胶着 → 不算 Edge",
+        "方向=胶着 → 不算 Edge",
+    ],
 }
 
 # 娱乐二串一不得再硬写进 skill / 启动卡 / 模板（偏好只在记忆）
@@ -111,6 +141,16 @@ def main() -> int:
         path = ROOT / rel
         if path.is_file() and forbidden in path.read_text(encoding="utf-8"):
             fails.append(f"ENTERTAINMENT_LEAK {rel} :: {forbidden}")
+
+    for rel, phrases in DIRECTION_STALE_MUST_ABSENT.items():
+        path = ROOT / rel
+        if not path.is_file():
+            fails.append(f"MISSING {rel}")
+            continue
+        text = path.read_text(encoding="utf-8")
+        for p in phrases:
+            if p in text:
+                fails.append(f"STALE_DIRECTION {rel} :: {p}")
 
     sample = (ROOT / "完整样例_体彩默认.txt").read_text(encoding="utf-8")
     block = sample.split("## 样例 B")[0]
