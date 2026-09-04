@@ -57,6 +57,9 @@ def main() -> int:
         "skip",
         "合同外",
         "score_miss_class",
+        "V17.4.22.4",
+        "单子倾向",
+        "研究二串一",
     ):
         if phrase not in skill:
             print(f"FAIL SKILL missing {phrase}")
@@ -68,7 +71,7 @@ def main() -> int:
         print("FAIL SKILL must ban 三格套餐/组合")
         return 1
 
-    print("PASS V17.4.22.3 accuracy hooks (direction required + 主不败/客不败 + score abstain)")
+    print("PASS V17.4.22.4 accuracy hooks (lean + pack + 研究二串一)")
     return 0
 
 

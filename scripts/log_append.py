@@ -79,7 +79,7 @@ def _self_check() -> None:
         "date": "2026-08-03",
         "match": "塞伊奈 vs 赫尔辛基",
         "league": "芬超",
-        "skill_version": "V17.4.22.3",
+        "skill_version": "V17.4.22.4",
         "intel_slots": ["伤停", "H2H"],
         "pre_match": {
             "research_direction": "客胜",

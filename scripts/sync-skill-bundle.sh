@@ -68,6 +68,12 @@ if [[ "$LOCAL" -eq 1 ]]; then
   cp -R "$REF" "$CUR/"
   cp "$CUR/SKILL.md" "$CUR/output-template.md" "$HOME/.cursor/skills/football-predict-v17/"
   cp -R "$REF" "$HOME/.cursor/skills/football-predict-v17/"
+  AGENTS="$HOME/.agents/skills/football-predict-v17"
+  if [[ -d "$AGENTS" ]]; then
+    cp "$CUR/SKILL.md" "$CUR/output-template.md" "$AGENTS/"
+    cp -R "$REF" "$AGENTS/"
+    echo "OK also synced → $AGENTS"
+  fi
   echo "OK synced → $REF + 本机 Cursor ($CUR 与 ~/.cursor/skills/football-predict-v17)"
 else
   echo "OK synced → $REF（精简包；含 rules/；--no-local 未装本机 Cursor）"

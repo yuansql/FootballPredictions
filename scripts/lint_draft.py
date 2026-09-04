@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""日稿 linter：01 单格 Top3 + counter 防格 + HT/FT + TOP2 闸 + 03 RMA（V17.4.22.3）。"""
+"""日稿 linter：01 单格 Top3 + counter 防格 + HT/FT + TOP2 闸 + 03 RMA（V17.4.22.4）。"""
 from __future__ import annotations
 
 import argparse
@@ -38,10 +38,14 @@ SLOT_RULE_DAY = date(2026, 8, 28)
 BOOK_RULE_DAY = date(2026, 8, 27)
 ATOM_RULE_DAY = date(2026, 8, 31)
 DIR_MUST_DAY = date(2026, 9, 2)
+LEAN_DAY = date(2026, 9, 4)
+LEAN_UNSET = "不定"
+LEAN_LOCK_AS_DIR = "写成锁"
+GEO_SKIP_WHEN_LEAN = frozenset({"trio_pick_mismatch", "low_tier_scored_defense"})
 
 SECTION_RE = re.compile(r"^##\s+场次[｜|](.+)$", re.M)
 DIR_SCORE_RE = re.compile(
-    r"\*\*方向｜比分(?:（[^）]+）)?\*\*[：:]\s*(.+?)｜\s*(.+)$",
+    r"\*\*方向(?:｜倾向)?｜比分(?:（[^）]+）)?\*\*[：:]\s*(.+)$",
     re.M,
 )
 SCORE_PART_RE = re.compile(
@@ -185,6 +189,112 @@ def _has_direction_atom(direction: str) -> bool:
     return bool(re.search(r"主胜|客胜|平局", direction))
 
 
+def _split_dir_line(rest: str) -> tuple[str, str | None, str]:
+    parts = [p.strip() for p in rest.split("｜")]
+    if len(parts) >= 3:
+        return parts[0], parts[1], "｜".join(parts[2:])
+    if len(parts) == 2:
+        return parts[0], None, parts[1]
+    return rest.strip(), None, ""
+
+
+def _score_1x2(score: str) -> str | None:
+    m = re.match(r"^(\d+)-(\d+)$", (score or "").strip())
+    if not m:
+        return None
+    h, a = int(m.group(1)), int(m.group(2))
+    if h > a:
+        return "主胜"
+    if h < a:
+        return "客胜"
+    return "平"
+
+
+def _allow_set(direction: str) -> set[str]:
+    if "胶着" in direction:
+        return set()
+    if "主不败" in direction:
+        return {"主胜", "平"}
+    if "客不败" in direction:
+        return {"客胜", "平"}
+    if "锁平" in direction or direction.strip() in ("平", "平局"):
+        return {"平"}
+    if "锁主" in direction or "主胜" in direction:
+        return {"主胜"}
+    if "锁客" in direction or "客胜" in direction:
+        return {"客胜"}
+    return set()
+
+
+def _is_dc(direction: str) -> bool:
+    return "主不败" in direction or "客不败" in direction
+
+
+def _parse_lean_token(text: str) -> str | None:
+    if not text:
+        return None
+    if re.search(r"单子腿不定|单子倾向不定|倾向不定", text):
+        return LEAN_UNSET
+    stripped = text.strip()
+    if stripped in ("锁主", "锁客", "锁平"):
+        return LEAN_LOCK_AS_DIR
+    if re.search(r"(倾向|单子腿|单子倾向).{0,8}(锁主|锁客|锁平)", text):
+        return LEAN_LOCK_AS_DIR
+    m = re.search(
+        r"(?:倾向|单子倾向|单子腿)[：:\s更像是]*?(主胜|客胜|平局|平)(?!败)",
+        text,
+    )
+    if m:
+        tok = m.group(1)
+        return "平" if tok in ("平", "平局") else tok
+    return None
+
+
+def _resolve_lean(lean_field: str | None, block: str) -> str | None:
+    chunks: list[str] = []
+    if lean_field:
+        chunks.append(lean_field)
+    chunks.extend(re.findall(r"单子倾向[：:][^\n｜]+", block))
+    chunks.extend(re.findall(r"单子腿[^\n。]{0,16}", block))
+    chunks.extend(re.findall(r"倾向(?:主胜|客胜|平局|平|不定)", block))
+    blob = " ".join(chunks)
+    return _parse_lean_token(blob)
+
+
+def _lint_lean_pack(
+    direction: str,
+    lean: str,
+    main: str,
+    sub: str,
+    defense: str,
+    abstain: bool,
+    title: str,
+) -> list[str]:
+    if lean in (LEAN_UNSET, LEAN_LOCK_AS_DIR):
+        return []
+    allow = _allow_set(direction)
+    issues: list[str] = []
+    if lean not in allow:
+        issues.append(f"{title}: 单子倾向 {lean} 不在允许集 {sorted(allow)}")
+        return issues
+    other = allow - {lean}
+    m1 = _score_1x2(main) if main else None
+    if m1 and m1 != lean:
+        issues.append(f"{title}: 倾向{lean} 时主推须是该族（现 {main}={m1}）")
+    if sub:
+        s1 = _score_1x2(sub)
+        if s1 and s1 != lean:
+            issues.append(f"{title}: 倾向{lean} 时次格须是该族（现 {sub}={s1}）")
+    if not abstain and defense:
+        d1 = _score_1x2(defense)
+        if d1 and other and d1 not in other:
+            issues.append(
+                f"{title}: 倾向{lean} 时防格须是允许集另一向 {sorted(other)}"
+                f"（现 {defense}={d1}）"
+            )
+    return issues
+
+
 def _lint_dir_must(direction: str, title: str, day: date | None) -> list[str]:
     if day is None or day < DIR_MUST_DAY:
         return []
@@ -293,8 +403,22 @@ def _lint_section(
     if not m:
         issues.append(f"{title}: 缺 **方向｜比分** 行")
         return issues, None
-    direction, tail = m.group(1).strip(), m.group(2).strip()
+    direction, lean_field, tail = _split_dir_line(m.group(1).strip())
     issues.extend(_lint_dir_must(direction, title, day))
+    lean = _resolve_lean(lean_field, block)
+    if day is not None and day >= LEAN_DAY and _is_dc(direction):
+        if not lean:
+            issues.append(
+                f"{title}: 主不败/客不败须写单子倾向（或单子腿不定），禁止用主推比分倒推"
+            )
+        elif lean == LEAN_LOCK_AS_DIR:
+            issues.append(f"{title}: 禁止把单子倾向写成锁主/锁客/锁平")
+        elif lean != LEAN_UNSET:
+            allow = _allow_set(direction)
+            if lean not in allow:
+                issues.append(
+                    f"{title}: 单子倾向 {lean} 不在允许集 {sorted(allow)}"
+                )
     main, sub, defense, pang = _split_scores(tail)
     score_abstain = bool(SCORE_ABSTAIN_RE.search(tail) or SCORE_ABSTAIN_RE.search(block))
     if not main:
@@ -305,6 +429,17 @@ def _lint_section(
             issues.append(f"{title}: 未解析到主推比分")
             return issues, None
     abstain = "弃权" in tail or "防：弃权" in tail or "防:**弃权" in block
+    if (
+        day is not None
+        and day >= LEAN_DAY
+        and lean
+        and lean not in (LEAN_UNSET, LEAN_LOCK_AS_DIR)
+        and main
+        and not score_abstain
+    ):
+        issues.extend(
+            _lint_lean_pack(direction, lean, main, sub, defense, abstain, title)
+        )
     tier = _guess_structure(direction, block)
     weld = _guess_weld_tag(block, direction)
     tags = [weld] if weld else []
@@ -329,6 +464,13 @@ def _lint_section(
             require_paths=False,
             counter_direction=counter_direction,
         )
+        if (
+            day is not None
+            and day >= LEAN_DAY
+            and lean
+            and lean not in (LEAN_UNSET, LEAN_LOCK_AS_DIR)
+        ):
+            geo = [g for g in geo if g.code not in GEO_SKIP_WHEN_LEAN]
         for g in geo:
             issues.append(f"{title}: [{g.code}] {g.message}")
         if tier == "high" and not paths:
@@ -449,6 +591,7 @@ def lint_02_nail(day_dir: Path) -> list[str]:
         issues.append(f"{f02.name}: 01 已宁缺 TOP2，禁止「今晚我钉三场」枚举方向")
     issues.extend(lint_02_atom_text(t02) if day >= ATOM_RULE_DAY else [])
     issues.extend(lint_02_must_direction(t02, day))
+    issues.extend(lint_02_lean(t02, day))
     return issues
 
 
@@ -580,6 +723,45 @@ def lint_02_must_direction(text: str, day: date | None) -> list[str]:
     return issues
 
 
+def lint_02_lean(text: str, day: date | None) -> list[str]:
+    """V17.4.22.4：双选须单子腿；禁把倾向写成锁；02 只三格；文末进球双选。"""
+    if day is None or day < LEAN_DAY:
+        return []
+    plain = _plain_02(text)
+    issues: list[str] = []
+    chunks = re.split(r"上半场剧本", plain)
+    n_dc = 0
+    for chunk in chunks[1:]:
+        window = chunk[:900]
+        if "主不败" not in window and "客不败" not in window:
+            continue
+        n_dc += 1
+        lean = _resolve_lean(None, window)
+        if "这场主不败" in window and "锁主" in window:
+            issues.append("02: 禁止把主不败写成锁主")
+        if "这场客不败" in window and "锁客" in window:
+            issues.append("02: 禁止把客不败写成锁客")
+        if not lean:
+            issues.append("02: 主不败/客不败须另写单子腿（或单子腿不定）")
+            continue
+        if lean == LEAN_LOCK_AS_DIR:
+            issues.append("02: 禁止把单子倾向写成锁主/锁客/锁平")
+            continue
+        direction = "主不败" if "主不败" in window else "客不败"
+        allow = _allow_set(direction)
+        if lean != LEAN_UNSET and lean not in allow:
+            issues.append(f"02: 单子倾向 {lean} 不在 {direction} 允许集")
+    if re.search(r"比分主推.{0,220}备\s+\*?\*?\d-\d", plain, re.S):
+        issues.append("02: 禁止第四比分格（备 x-x）；旁挂留 01")
+    if re.search(r"比分主推.{0,180}旁挂", plain):
+        issues.append("02: 旁挂不得进 02")
+    if n_dc or "上半场剧本" in plain:
+        if "进球双选" not in plain:
+            issues.append("02: 文末须【研究二串一】进球双选 × 胜平负（不标仓位）")
+        if re.search(r"(研究)?二串一.{0,32}(可介入|仓位|下注)", plain):
+            issues.append("02: 研究二串一禁止标仓位")
+    return issues
+
 
 def lint_03(path: Path) -> list[str]:
     text = path.read_text(encoding="utf-8")
@@ -690,11 +872,70 @@ path_D = 偷 ｜ weight = 0.15 ｜ 终场 = 0-1
     ab_iss, ab_meta = _lint_section(abstain, "弃权场", day=DIR_MUST_DAY)
     assert ab_meta is not None
     assert not any("未解析到主推比分" in x for x in ab_iss), ab_iss
+    pack_bad = """**方向｜倾向｜比分**：客不败｜倾向客胜｜**0-1** 主推 / **1-1** 次 / **1-2** 防
+研究 ★★★☆☆｜胜平负：客不败｜单子倾向：客胜｜进球数：一至三球
+"""
+    pb, _ = _lint_section(pack_bad, "图卢兹抄格", day=LEAN_DAY)
+    assert any("次格" in x or "主推须" in x or "防格" in x for x in pb), pb
+    pack_ok = """**方向｜倾向｜比分**：客不败｜倾向客胜｜**0-1** 主推 / **1-2** 次 / **1-1** 防
+研究 ★★★☆☆｜胜平负：客不败｜单子倾向：客胜｜进球数：一至三球
+"""
+    po, _ = _lint_section(pack_ok, "图卢兹装箱", day=LEAN_DAY)
+    assert not any("次格" in x or "主推须" in x or "防格" in x for x in po), po
+    unset_ok = """**方向｜倾向｜比分**：客不败｜单子腿不定｜**0-1** 主推 / **1-1** 次 / **1-2** 防
+研究 ★★★☆☆｜胜平负：客不败｜单子倾向：不定｜进球数：一至三球
+"""
+    uo, _ = _lint_section(unset_ok, "不定混装", day=LEAN_DAY)
+    assert not any("须写单子倾向" in x or "不在允许集" in x for x in uo), uo
+    out_allow, _ = _lint_section(
+        """**方向｜倾向｜比分**：主不败｜倾向客胜｜**1-0** 主推 / **2-1** 次 / **1-1** 防
+研究 ★★★☆☆｜胜平负：主不败｜单子倾向：客胜｜进球数：一至二球
+""",
+        "越界",
+        day=LEAN_DAY,
+    )
+    assert any("允许集" in x for x in out_allow), out_allow
+    miss_lean, _ = _lint_section(
+        """**方向｜比分**：客不败｜**0-1** 主推 / **1-1** 次 / **1-2** 防
+研究 ★★★☆☆｜胜平负：客不败｜进球数：一至三球
+""",
+        "缺倾向",
+        day=LEAN_DAY,
+    )
+    assert any("单子倾向" in x for x in miss_lean), miss_lean
+    old_skip, _ = _lint_section(
+        """**方向｜比分**：客不败｜**0-1** 主推 / **1-1** 次 / **1-2** 防
+研究 ★★★☆☆｜胜平负：客不败｜进球数：一至三球
+""",
+        "旧稿",
+        day=DIR_MUST_DAY,
+    )
+    assert not any("单子倾向" in x for x in old_skip), old_skip
+    lock_as_lean, _ = _lint_section(
+        """**方向｜倾向｜比分**：客不败｜锁客｜**0-1** 主推 / **1-2** 次 / **1-1** 防
+研究 ★★★☆☆｜胜平负：客不败｜进球数：一至二球
+""",
+        "写成锁",
+        day=LEAN_DAY,
+    )
+    assert any("写成锁" in x for x in lock_as_lean), lock_as_lean
+    lean02_miss = lint_02_lean(
+        "上半场剧本：客队先压。这场客不败。进球一至二球。比分主推 0-1，次 1-1，防 1-2。备 1-0。",
+        LEAN_DAY,
+    )
+    assert any("单子腿" in x for x in lean02_miss), lean02_miss
+    assert any("第四比分" in x or "备" in x for x in lean02_miss), lean02_miss
+    lean02_ok = lint_02_lean(
+        "上半场剧本：客队先压。这场客不败。单子腿更像客胜。进球一至二球。"
+        "比分主推 0-1，次 1-2，防 1-1。\n进球双选 1/2 × 客胜",
+        LEAN_DAY,
+    )
+    assert lean02_ok == [], lean02_ok
     print("OK lint_draft self-check")
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Lint toutiao drafts for V17.4.22.3 hooks")
+    ap = argparse.ArgumentParser(description="Lint toutiao drafts for V17.4.22.4 hooks")
     ap.add_argument("path", nargs="?", help="01.md / 03.md / YYYY-MM-DD 日夹")
     ap.add_argument("--warn-only", action="store_true", help="只打印，exit 0")
     args = ap.parse_args()
