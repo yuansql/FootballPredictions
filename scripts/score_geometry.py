@@ -918,5 +918,123 @@ def _self_check() -> None:
     print("OK score_geometry self-check (V17.4.22.2 低结构可交权重 #3)")
 
 
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# V17.4.23 补丁：三桶补偿后 Top3（追加，不删改上方 V17.4.20 底盘）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+COMPENSATION_SCORES: dict[str, tuple[str, ...]] = {
+    "HIGH_SCORING": (
+        "2-2", "3-1", "1-3", "2-3", "3-2", "4-1", "1-4",
+        "3-0", "0-3", "4-0", "0-4", "3-3",
+    ),
+    "LOW_SCORING": ("0-0", "1-0", "0-1", "1-1"),
+    "REVERSAL_HOME": ("2-1", "3-1", "2-0", "3-2", "4-2"),
+    "REVERSAL_AWAY": ("1-2", "1-3", "0-2", "2-3", "2-4"),
+}
+
+
+def _flatten_signals(signals):
+    out = set()
+    for s in signals:
+        s = s.strip().upper()
+        if not s:
+            continue
+        if s in COMPENSATION_SCORES:
+            out.add(s)
+        if "HIGH" in s:
+            out.add("HIGH_SCORING")
+        if "LOW" in s:
+            out.add("LOW_SCORING")
+        if "REVERSAL" in s and "HOME" in s:
+            out.add("REVERSAL_HOME")
+        if "REVERSAL" in s and "AWAY" in s:
+            out.add("REVERSAL_AWAY")
+    return out
+
+
+def compensate_top3(result, signals, *, direction_text="", lean_text=""):
+    """三桶补偿后重新选 Top3。"""
+    sigs = _flatten_signals(signals)
+    if not sigs:
+        return result
+
+    pool = {s: w for s, w in result.ranked_leaves}
+    for sig in sigs:
+        for sc in COMPENSATION_SCORES.get(sig, ()):
+            if sc not in pool:
+                pool[sc] = 0.01
+
+    ranked = sorted(pool.items(), key=lambda x: (-x[1], x[0]))
+    if len(ranked) < 2:
+        return result
+
+    main = ranked[0][0]
+
+    sub = ranked[1][0]
+    main_cls = score_class(main)
+    for s, w in ranked[1:]:
+        if score_class(s) != main_cls:
+            sub = s
+            break
+
+    defense = ranked[2][0] if len(ranked) >= 3 else sub
+    comp_scores = set()
+    for sig in sigs:
+        comp_scores.update(COMPENSATION_SCORES.get(sig, ()))
+
+    for s, w in ranked[2:]:
+        if s in comp_scores:
+            defense = s
+            break
+
+    w3 = ranked[2][1] if len(ranked) >= 3 else 0.0
+    w4 = ranked[3][1] if len(ranked) >= 4 else 0.0
+    margin = w3 - w4 if len(ranked) >= 4 else w3
+    hint = "low" if len(ranked) < 3 or margin < TRIO_EPS else "high"
+
+    return TrioCompareResult(
+        ranked_leaves=tuple(ranked),
+        best_trio=(main, sub, defense),
+        best_sum=ranked[0][1],
+        runner_sum=w4,
+        margin=margin,
+        structure_hint=hint,
+    )
+
+
+def trio_compare_with_compensation(paths, signals, *, eps=TRIO_EPS, direction_text="", lean_text=""):
+    base = trio_compare(paths, eps=eps)
+    if base is None:
+        return None
+    return compensate_top3(base, signals, direction_text=direction_text, lean_text=lean_text)
+
+
+def _self_check_v17_4_23():
+    paths = [
+        PathLeaf("A", 0.40, "1-0"),
+        PathLeaf("B", 0.30, "2-0"),
+        PathLeaf("C", 0.15, "1-1"),
+        PathLeaf("D", 0.10, "0-1"),
+    ]
+    base = trio_compare(paths)
+    assert base is not None
+    assert base.best_trio == ("1-0", "2-0", "1-1")
+
+    comp = compensate_top3(base, ["HIGH_SCORING"])
+    assert "2-2" in [s for s, _ in comp.ranked_leaves] or "3-1" in [s for s, _ in comp.ranked_leaves]
+
+    comp_low = compensate_top3(base, ["LOW_SCORING"])
+    assert "0-0" in [s for s, _ in comp_low.ranked_leaves]
+
+    comp_rev = compensate_top3(base, ["REVERSAL_HOME"])
+    trio = comp_rev.best_trio
+    assert any(s in ("2-1", "3-1", "2-0") for s in trio), f"防格未给逆转分: {trio}"
+
+    print("OK score_geometry V17.4.23 compensation self-check")
+
+
 if __name__ == "__main__":
     _self_check()
+    _self_check_v17_4_23()
