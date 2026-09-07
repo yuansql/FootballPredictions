@@ -27,6 +27,9 @@ from datetime import datetime
 STRUCTURE_GATE_DAY = "2026-09-07"
 DIR_MUST_DAY = "2026-09-02"
 LEAN_DAY = "2026-09-04"
+ICS_MIN_DAY = "2026-09-07"   # ICS≥70 或 CAUTION 从这天起检查
+RED_FLAG_DAY = "2026-09-07"  # 红旗清单从这天起检查
+
 
 # === 导入 structure_gate ===
 import importlib.util
@@ -352,6 +355,54 @@ def lint_deep_away_trap(sections: list[dict], day: str | None = None) -> list[di
             'message': f"深盘豪门客场未做确认书/未降级: {away} SP_A={sp_a:.2f}"
         })
 
+    return warnings
+
+
+
+def lint_ics_check(sections: list[dict], day: str | None = None) -> list[dict]:
+    """P3: ICS 情报质量评分检查。"""
+    if day and day < ICS_MIN_DAY:
+        return []
+    warnings: list[dict] = []
+    for sec in sections:
+        body = sec.get("body", "")
+        # 简化检查：查找 ICS 标记
+        has_ics = "ICS" in body or "情报质量评分" in body
+        if not has_ics:
+            warnings.append({
+                "rule": "lint_ics_missing",
+                "severity": "WARN",
+                "match": sec.get("header", "")[:40],
+                "message": "未写 ICS 情报质量评分 → 须补 (V17.4.24)",
+            })
+    return warnings
+
+
+def lint_red_flags(sections: list[dict], day: str | None = None) -> list[dict]:
+    """P3: 红旗清单扫描。"""
+    if day and day < RED_FLAG_DAY:
+        return []
+    import re
+    red_patterns = [
+        ("RF_01", r"几乎不丢球|不丢球|零封.*稳|防线固若金汤"),
+        ("RF_02", r"复仇.*必胜|讨债.*稳赢|主场.*必胜"),
+        ("RF_03", r"赛程.*完全.*不利|一定.*疲劳"),
+        ("RF_04", r"客队.*不可能|主队.*绝对|不可能.*输"),
+        ("RF_05", r"正常.*发挥.*就赢|正常打.*就赢"),
+        ("RF_06", r"虽然.*但是.*强|虽然.*不过.*必胜"),
+    ]
+    warnings: list[dict] = []
+    for sec in sections:
+        body = sec.get("body", "")
+        for code, pat in red_patterns:
+            if re.search(pat, body, re.IGNORECASE):
+                warnings.append({
+                    "rule": code,
+                    "severity": "WARN",
+                    "match": sec.get("header", "")[:40],
+                    "message": f"红旗信号触发: {code} → 重写 (V17.4.24)",
+                })
+                break  # 一个section只报一次
     return warnings
 
 if __name__ == "__main__":

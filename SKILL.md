@@ -1,7 +1,7 @@
 ---
 name: football-predict-v17
 description: >-
-  Executes AQQ 2足球框架 V17.4.23 football predictions (体彩 default unless 北单).
+  Executes AQQ 2足球框架 V17.4.24 football predictions (体彩 default unless 北单).
   INTEL_FIRST slim pack + dual recommend: research 5★ (direction required;
   goals required; score if likely). Direction-first weld permit (反剧本收据) before TOP;
   RMA dual-bay; per-score Top3; receipt ±1-goal 防 bind; HT/FT opening path;
@@ -10,7 +10,7 @@ description: >-
   Use for 竞彩 fixtures, 球赛预测, 挪超/芬超/瑞超/英超/世界杯 analysis.
 ---
 
-# 2足球框架 V17.4.22.4 · 情报优先执行器（精简包 · 双轨推荐）
+# 2足球框架 V17.4.24 · 情报优先执行器（精简包 · 双轨推荐）
 
 ## 总原则（最高优先）
 
@@ -402,3 +402,58 @@ Edge **不得**改写已定剧本方向与【结果预测】。
 【取证清单】【情报叙事】【球队画像】【比赛剧本】（含命中标签时的**【反剧本收据】**）【硬闸自检】含出票通道+【降维】+【V15.6补丁】【结果预测】**【研究推荐】**【出票】【投注星级】
 
 详见 [output-template.md](output-template.md)。
+
+## V17.4.24 补丁（2026-09-07 · P3 情报质量闸）
+
+### 问题
+28场复盘准确率分析揭示：方向命中78.6%但大量miss源于情报层"搜到就写"，
+缺乏对情报质量的量化评估。假自信（叙事铿锵但证据薄弱）和低结构过拟合
+是两大主因。
+
+### 新增：情报质量评分 (ICS)
+
+每场比赛输出前必须计算 ICS (Intelligence Completeness Score)：
+
+| 维度 | 满分 | 说明 |
+|------|------|------|
+| 取证槽 | 100 | 积分(15) + 近5(15) + 伤停(25) + H2H(15) + 战意(15) + 赛程(15) |
+| 来源加成 | ±15 | ≥3来源+5，≥5来源+15；≤1来源-10 |
+| 叙事加成 | ±15 | 有情报叙事+10；无叙事-15 |
+
+**ICS ≥ 70**: PROCEED（正常分析）
+**50 ≤ ICS < 70**: CAUTION（必须补充至少1个取证槽或额外来源）
+**ICS < 50**: STOP（该场只写"情报不足，放弃深度分析"）
+
+脚本：`scripts/intelligence_checklist.py`
+
+### 新增：红旗清单 (Red Flag Scanner)
+
+以下6种措辞出现即触发WARNING，须重写叙事：
+
+| 代码 | 红旗信号 | 原因 |
+|------|---------|------|
+| RF_01 | "几乎不丢球" / "防线固若金汤" | 过度自信，忽略偶然性 |
+| RF_02 | "复仇必胜" / "讨债稳赢" | 情感叙事替代理性分析 |
+| RF_03 | "赛程完全不利" / "一定疲劳" | 未搜到证据的推测 |
+| RF_04 | "绝对" / "不可能输" | 确定性幻觉 |
+| RF_05 | "正常发挥就赢" | 忽略对手变量 |
+| RF_06 | "虽然...但是...强" / "虽然...不过必胜" | 先射箭再画靶 |
+
+脚本：`scripts/red_flag_scanner.py`
+
+### 新增：强制脚本检查点
+
+每场分析必须按顺序执行：
+1. `structure_gate.py` → P0 低结构闸
+2. `deep_away_trap.py` → P2 深盘陷阱
+3. `intelligence_checklist.py` → P3 ICS评分
+4. `red_flag_scanner.py` → P3 红旗扫描
+
+**lint拦截**：`lint_draft.py` 从 V17.4.24 起检查 ICS 标记和红旗信号，
+未通过的比赛输出 WARNING。
+
+### 执行纪律
+
+- ICS < 50 的比赛：方向写"情报不足"，不进TOP，不研究推荐
+- 红旗信号触发：必须重写对应段落，不能改个词糊弄
+- 所有脚本跑完后才允许进入【比赛剧本】阶段
