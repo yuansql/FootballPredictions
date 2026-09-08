@@ -61,17 +61,18 @@ def parse_review_file(path: Path) -> list[dict[str, Any]]:
             if m:
                 rma = m.group(1).strip()
 
-            # 提取方向结果
-            m = re.search(r"方向[命中miss错]+|direction_(hit|miss)", line)
+            # 提取方向结果（支持中文格式）
+            m = re.search(r"方向(?:命中|结果)?[=:]\s*(hit|miss|命中|miss|错)", line)
             if m:
-                direction_result = "hit" if "hit" in line or "命中" in line else "miss"
+                result = m.group(1).strip()
+                direction_result = "hit" if result in ("hit", "命中") else "miss"
 
         if clauses and rma:
             for c in clauses:
                 matches.append({
                     "clause": c,
                     "rma": rma,
-                    "direction_hit": direction_result if "direction" in locals() else None,
+                    "direction_hit": direction_result if 'direction_result' in dir() else None,
                 })
 
     return matches
