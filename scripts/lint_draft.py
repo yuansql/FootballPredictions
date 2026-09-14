@@ -305,7 +305,7 @@ def _parse_remaining_set(rem_raw: str) -> set[str]:
 
 def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> list[dict]:
     """
-    V17.4.27：01 每场须有 排除=｜剩余=｜二次=（或【方向三步】一行版）。
+    V17.4.27：01 每场须有 排除=｜剩余=｜二次=（二次须含 倾斜…→ 或 分不清→ 分叉）。
     剩{主胜,客胜} 禁止二次写主不败/客不败。
     """
     if day and day < EXCLUDE_DAY:
@@ -324,7 +324,13 @@ def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> lis
 
         m_ex = re.search(r'排除\s*=\s*(主胜|平|客胜)', blob)
         m_rem = re.search(r'剩余\s*=\s*\{([^}]+)\}', blob)
-        m_sec = re.search(r'二次\s*=\s*(锁主|锁平|锁客|主不败|客不败)', blob)
+        # 二次=… → 锁主|…  （允许中间夹 倾斜/分不清/深让降维）
+        m_sec = re.search(
+            r'二次\s*=\s*([^\n]*?)(→|->)\s*(锁主|锁平|锁客|主不败|客不败)',
+            blob,
+        )
+        # 兼容旧稿：二次=锁主（无箭头）
+        m_sec_legacy = re.search(r'二次\s*=\s*(锁主|锁平|锁客|主不败|客不败)\b', blob)
 
         if not m_ex:
             warnings.append({
@@ -347,16 +353,33 @@ def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> lis
         else:
             rem_tokens = _parse_remaining_set(m_rem.group(1))
 
-        if not m_sec:
+        if m_sec:
+            secondary = m_sec.group(3)
+            fork = m_sec.group(1) or ''
+            if ('倾斜' not in fork) and ('分不清' not in fork) and ('深让' not in fork):
+                warnings.append({
+                    'rule': 'lint_exclude_three_step',
+                    'severity': 'WARN',
+                    'match': header,
+                    'message': '二次= 箭头前须含「倾斜…」或「分不清」（或深让降维说明）',
+                })
+        elif m_sec_legacy:
+            secondary = m_sec_legacy.group(1)
+            warnings.append({
+                'rule': 'lint_exclude_three_step',
+                'severity': 'WARN',
+                'match': header,
+                'message': '二次= 缺分叉（应为 倾斜…→锁* 或 分不清→不败｜单子腿=）',
+            })
+        else:
             warnings.append({
                 'rule': 'lint_exclude_three_step',
                 'severity': 'ERROR',
                 'match': header,
-                'message': '缺少 二次=<锁*|主不败|客不败>（V17.4.27 固定行）',
+                'message': '缺少 二次=倾斜…→锁* 或 分不清→不败（V17.4.27）',
             })
             continue
 
-        secondary = m_sec.group(1)
         if secondary not in valid_secondary:
             warnings.append({
                 'rule': 'lint_exclude_three_step',
@@ -389,14 +412,14 @@ def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> lis
                 'rule': 'lint_exclude_three_step',
                 'severity': 'WARN',
                 'match': header,
-                'message': f"二次=主不败 但剩余={rem_tokens}（期望 {{主胜,平}}）",
+                'message': f"二次→主不败 但剩余={rem_tokens}（期望 {{主胜,平}}）",
             })
         if secondary == '客不败' and rem_tokens and rem_tokens != {'客胜', '平'}:
             warnings.append({
                 'rule': 'lint_exclude_three_step',
                 'severity': 'WARN',
                 'match': header,
-                'message': f"二次=客不败 但剩余={rem_tokens}（期望 {{客胜,平}}）",
+                'message': f"二次→客不败 但剩余={rem_tokens}（期望 {{客胜,平}}）",
             })
 
     return warnings
