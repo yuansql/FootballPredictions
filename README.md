@@ -1,13 +1,14 @@
-# FootballPredictions · 2足球框架 V17.4.9
+# FootballPredictions · 2足球框架 V17.4.27
 
 体彩/竞彩足球预测框架 + 可分发 Agent Skill。  
-**V17.4.9**：**INTEL_FIRST 精简包** + **双轨推荐**（研究五星必含胜平负/进球数/比分；出票可空仓）+ 双闸门 + 降维 + **V15.6 五补丁**。  
-已移除一键全量合并 / 说明书 / 初始框架，减少 Agent 噪音。
+**当前执行版 = V17.4.27**（`SKILL.md` / `output-template.md` / `references/03-复盘模板.md`）。
 
-**完整用法 → [使用.md](./使用.md)**
+主菜：伤停/战意/形态/剧本定方向。佐料：盘口/SP/Edge 只做出票闸。  
+方向必须给（锁\* / 主不败 / 客不败）；禁胶着；`01` 场场 `排除=`｜`剩余=`｜`二次=`。
+
+**完整用法 → [使用.md](./使用.md)** · 作业细则 → [SKILL.md](./SKILL.md)
 
 仓库：https://github.com/yuansql/FootballPredictions
-
 
 ---
 
@@ -45,26 +46,32 @@ openskills install yuansql/FootballPredictions
 FootballPredictions/
 ├── 使用.md
 ├── README.md
-├── rules/                 ← V15.6 补丁
+├── SKILL.md                 ← 执行器正文（与 skills/ 同文）
+├── output-template.md
+├── SYNC_STAMP.txt
+├── references/              ← 8 个框架正文 + 03-复盘模板
+├── rules/                   ← V15.6 补丁
 ├── scripts/
 │   ├── sync-skill-bundle.sh
-│   └── verify_intel_first.py
-├── skills/football-predict-v17/
-│   ├── SKILL.md
-│   ├── output-template.md
-│   └── references/        ← 精简框架副本
-└── *.txt                  ← 源规则（8 个正文）
+│   └── lint_draft.py
+└── skills/football-predict-v17/
+    ├── SKILL.md
+    ├── output-template.md
+    └── references/          ← sync 生成的精简副本
 ```
 
 ---
 
 ## 维护者
 
+改 `SKILL.md` / `output-template.md` / `references/*.txt` / `rules/` 后必须：
+
 ```bash
 bash scripts/sync-skill-bundle.sh
-python3 scripts/verify_intel_first.py
-# 需要本机 Cursor 时：bash scripts/sync-skill-bundle.sh --local-cursor
+python3 scripts/lint_draft.py <日夹|01|03> --warn-only
 ```
+
+`README.md` 与 `使用.md` **不在** sync 脚本里，改版本号时要手改这两份。
 
 ---
 
