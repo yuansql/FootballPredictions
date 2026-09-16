@@ -326,7 +326,7 @@ def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> lis
         m_rem = re.search(r'剩余\s*=\s*\{([^}]+)\}', blob)
         # 二次=… → 锁主|…  （允许中间夹 倾斜/分不清/深让降维）
         m_sec = re.search(
-            r'二次\s*=\s*([^\n｜|]*)(→|->)\s*(锁主|锁平|锁客|主不败|客不败)',
+            r'二次\s*=\s*([^\n]*?)(→|->)\s*(锁主|锁平|锁客|主不败|客不败)',
             blob,
         )
         # 兼容旧稿：二次=锁主（无箭头）

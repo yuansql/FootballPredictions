@@ -1,7 +1,7 @@
 ---
 name: football-predict-v17
 description: >-
-  Executes AQQ 2足球框架 V17.4.27 football predictions (体彩 default unless 北单).
+  Executes AQQ 2足球框架 V17.4.28 football predictions (体彩 default unless 北单).
   INTEL_FIRST slim pack + dual recommend: research 5★ (direction required;
   goals required; score if likely). Direction-first weld permit (反剧本收据) before TOP;
   RMA dual-bay; per-score Top3; receipt ±1-goal 防 bind; HT/FT opening path;
@@ -12,7 +12,7 @@ description: >-
   Use for 竞彩 fixtures, 球赛预测, 挪超/芬超/瑞超/英超/世界杯 analysis.
 ---
 
-# 2足球框架 V17.4.27 · 情报优先执行器（精简包 · 双轨推荐）
+# 2足球框架 V17.4.28 · 情报优先执行器（精简包 · 双轨推荐）
 
 ## 总原则（最高优先）
 
@@ -99,7 +99,22 @@ description: >-
 
 赛后复盘对账：`counter_hit`（其实反剧本对了）vs `weld_ok`（主轴成立）vs `weld_failure`（条款失灵）。用条款热力图改 margin，**禁止**单次 MISS 直接加软清单行。
 
-来源：08-25 森林讨债 / 瓦伦焊平；ADHD 短名单「反剧本收据」。
+#### 【状态评分硬闸】（V17.4.28 · 2026-09-16 · 名气≠状态）
+
+当 `why_reject` 以「球星名气/历史地位」为核心论据（如「C罗在」「梅西效应」「队内头牌」）时，必须追加**近 5 场评分收据**，否则 `why_reject` 视为空话，方向降为 **主不败或客不败**：
+
+| 检查项 | 数据来源 | 硬阈值 |
+|--------|---------|--------|
+| 核心球员近 5 场平均评分 | Sofascore / Whoscored 球员页 | `<7.0` → 标记「状态下滑」；`≥7.5` 且 ≥2 球/助 → 标记「状态火热」 |
+| 出场时间 | 同上 | 近 5 场替补出场 ≥3 场 → 标记「替补碎片，参考性降档」 |
+
+**硬闸格式**（嵌入 `why_reject` 末尾）：
+```
+[状态评分硬闸] 核心球员 X：近5场均分 X.X（状态下滑/火热/正常），
+进球/助攻 Y 个；[若标记状态下滑] 名气≠当前脚感，仍选强侧因 Z。
+```
+
+来源：09-15 RMA 复盘（阿布艾因/阿拉维斯 方向 RMA）。
 
 ### RMA 双仓返修（V17.4.16 · 2026-08-26 · ADHD）
 
