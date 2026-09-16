@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.27 日闸 lint 工具
+lint_draft.py — V17.4.30 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -32,6 +32,10 @@ LEAN_DAY = "2026-09-04"
 ICS_MIN_DAY = "2026-09-07"   # ICS≥70 或 CAUTION 从这天起检查
 RED_FLAG_DAY = "2026-09-07"  # 红旗清单从这天起检查
 EXCLUDE_DAY = "2026-09-14"   # 排除|剩余|二次固定行
+FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
+BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
+STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
+MARKET_DIV_DAY = "2026-09-16"  # 跨市场背离预警从这天起检查
 
 
 # === 导入 structure_gate ===
@@ -543,6 +547,10 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         ("lint_exclude_three_step", lint_exclude_three_step),
         ("lint_direction_score_consistency", lint_direction_score_consistency),
         ("lint_deep_away_trap", lint_deep_away_trap),
+        ("lint_form_gate", lint_form_gate),
+        ("lint_both_score", lint_both_score),
+        ("lint_state_crush", lint_state_crush),
+        ("lint_market_divergence", lint_market_divergence),
     ]
 
     for name, fn in rules:
@@ -572,8 +580,11 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
 
 def lint_deep_away_trap(sections: list[dict], day: str | None = None) -> list[dict]:
     """
-    深盘陷阱检测。
-    客队是豪门且 SP_A <= 1.50 但无确认书/未降级 → warn。
+    深盘陷阱检测（V17.4.29 扩展）。
+    触发条件（满足任一）但无确认书/未降级 → warn：
+    1. 客队豪门 + SP_A <= 1.50
+    2. 客队豪门 + 亚盘客让 >= 0.75
+    3. 跨市场背离（竞彩让球盘与亚盘初盘 >= 1 档）
     """
     TRAP_DAY = "2026-09-07"
     if day and day < TRAP_DAY:
@@ -588,11 +599,13 @@ def lint_deep_away_trap(sections: list[dict], day: str | None = None) -> list[di
     spec.loader.exec_module(trap_module)
     is_big_club = trap_module.is_big_club
     DEEP_AWAY_THRESHOLD = trap_module.DEEP_AWAY_THRESHOLD
+    ASIAN_HANDICAP_THRESHOLD = trap_module.ASIAN_HANDICAP_THRESHOLD
 
     warnings = []
     for sec in sections:
         lines = sec['lines']
         header = sec['header']
+        body = sec.get('body', '')
 
         # 提取客队（从标题 "主队 vs 客队"）
         away = None
@@ -604,17 +617,43 @@ def lint_deep_away_trap(sections: list[dict], day: str | None = None) -> list[di
         if not away or not is_big_club(away):
             continue
 
-        # 提取 SP
+        # 检测触发条件
+        triggered = False
+        trigger_reason = ""
+
+        # 条件1: SP_A <= 1.50
         sp = None
         for line in lines:
             sp = parse_sp_line(line)
             if sp:
                 break
-        if not sp:
-            continue
+        if sp:
+            sp_h, sp_d, sp_a = sp
+            if sp_a <= DEEP_AWAY_THRESHOLD:
+                triggered = True
+                trigger_reason = f"SP_A={sp_a:.2f}"
 
-        sp_h, sp_d, sp_a = sp
-        if sp_a > DEEP_AWAY_THRESHOLD:
+        # 条件2: 亚盘客让 >= 0.75
+        if not triggered:
+            ah_match = re.search(r'客让\s*([+-]?\d+\.?\d*)', body)
+            if ah_match:
+                ah = float(ah_match.group(1))
+                if abs(ah) >= ASIAN_HANDICAP_THRESHOLD:
+                    triggered = True
+                    trigger_reason = f"亚盘客让={ah}"
+
+        # 条件3: 跨市场背离
+        if not triggered:
+            if '跨市场背离' in body or '竞彩让' in body and '亚盘' in body:
+                div_match = re.search(r'竞彩让\s*([+-]?\d+\.?\d*).*?亚盘.*?([+-]?\d+\.?\d*)', body)
+                if div_match:
+                    jc_handicap = float(div_match.group(1))
+                    ah_handicap = float(div_match.group(2))
+                    if abs(jc_handicap - ah_handicap) >= 1:
+                        triggered = True
+                        trigger_reason = f"跨市场背离:竞彩{jc_handicap}vs亚盘{ah_handicap}"
+
+        if not triggered:
             continue
 
         # 检查是否有确认书或降级
@@ -633,9 +672,8 @@ def lint_deep_away_trap(sections: list[dict], day: str | None = None) -> list[di
             'rule': 'lint_deep_away_trap',
             'severity': 'WARN',
             'match': header,
-            'sp_a': sp_a,
             'away': away,
-            'message': f"深盘豪门客场未做确认书/未降级: {away} SP_A={sp_a:.2f}"
+            'message': f"深盘豪门客场未做确认书/未降级: {away} ({trigger_reason})"
         })
 
     return warnings
@@ -688,8 +726,151 @@ def lint_red_flags(sections: list[dict], day: str | None = None) -> list[dict]:
                 break  # 一个section只报一次
     return warnings
 
+
+def lint_form_gate(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    状态评分硬闸检测（V17.4.28）。
+    若 why_reject 含球星名气叙事但未附 [状态评分硬闸] 收据 → ERROR。
+    """
+    if day and day < FORM_GATE_DAY:
+        return []
+    warnings: list[dict] = []
+    star_keywords = ["C罗", "梅西", "内马尔", "姆巴佩", "哈兰德", "贝林厄姆", "萨拉赫", "凯恩",
+                     "球星", "头牌", "当家", "核心球员", "大腿"]
+    for sec in sections:
+        body = sec.get("body", "")
+        # 检查是否有反剧本收据
+        if "【反剧本收据】" not in body:
+            continue
+        # 提取 why_reject 字段内容
+        why_match = re.search(r'why_reject\s*=\s*(.+?)(?:\nclause_id|\n\[|【|$)', body, re.DOTALL)
+        why_text = why_match.group(1).strip() if why_match else ""
+        # 检查是否以球星名气为核心
+        has_star_narrative = any(kw in why_text for kw in star_keywords)
+        has_form_gate = "[状态评分硬闸]" in body or "状态评分硬闸" in body
+        if has_star_narrative and not has_form_gate:
+            warnings.append({
+                "rule": "lint_form_gate",
+                "severity": "ERROR",
+                "match": sec.get("header", "")[:40],
+                "message": "why_reject 以球星名气为核心论据但未附 [状态评分硬闸] → 须补近5场评分收据 (V17.4.28)",
+            })
+    return warnings
+
+
+def lint_both_score(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    BOTH_SCORE 比分补偿检测（V17.4.28）。
+    若触发 BOTH_SCORE 信号，防格必须含 1-1/2-1/1-2 族。
+    """
+    if day and day < BOTH_SCORE_DAY:
+        return []
+    both_score_patterns = [
+        r"BOTH_SCORE.*触发",
+        r"双方进球",
+        r"双方.*均进球≥1",
+    ]
+    both_score_scores = {"1-1", "2-1", "1-2", "2-2", "3-1", "1-3"}
+    warnings: list[dict] = []
+    for sec in sections:
+        body = sec.get("body", "")
+        # 检查是否触发 BOTH_SCORE
+        triggered = any(re.search(p, body) for p in both_score_patterns)
+        if not triggered:
+            continue
+        # 提取比分推荐段
+        score_section = re.search(r'【比分推荐.*?】(.+?)(?=【|$)', body, re.DOTALL)
+        if not score_section:
+            continue
+        score_text = score_section.group(1)
+        # 找主/次/防
+        m = re.search(r'主/次/防\s*=\s*([^/\n]+)/([^/\n]+)/([^\n]+)', score_text)
+        if not m:
+            continue
+        defense = m.group(3).strip()
+        # 检查防格是否含双方进球比分
+        has_both = any(s in defense for s in both_score_scores)
+        if not has_both:
+            warnings.append({
+                "rule": "lint_both_score",
+                "severity": "ERROR",
+                "match": sec.get("header", "")[:40],
+                "message": f"BOTH_SCORE 触发但防格 '{defense}' 不含双方进球比分 (1-1/2-1/1-2 族) → 须补 (V17.4.28)",
+            })
+    return warnings
+
+
+def lint_state_crush(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    状态碾压冷门预警检测（V17.4.30）。
+    豪门/热门方亚盘让≥0.75 + 核心球员评分<7.0 → WARN。
+    """
+    if day and day < STATE_CRUSH_DAY:
+        return []
+    warnings: list[dict] = []
+    star_keywords = ["C罗", "梅西", "内马尔", "姆巴佩", "哈兰德", "贝林厄姆", "萨拉赫", "凯恩",
+                     "球星", "头牌", "当家", "核心球员", "大腿"]
+    for sec in sections:
+        body = sec.get("body", "")
+        header = sec.get("header", "")[:40]
+
+        # 1. 亚盘让≥0.75
+        has_deep_handicap = False
+        ah_match = re.search(r'(主|客)让\s*([+-]?\d+\.?\d*)', body)
+        if ah_match:
+            handicap = float(ah_match.group(2))
+            if abs(handicap) >= 0.75:
+                has_deep_handicap = True
+
+        # 2. 核心球员评分<7.0 或状态下滑
+        has_low_form = re.search(r'状态下滑|均分\s*[0-6]\.\d|评分\s*[0-6]\.\d', body)
+
+        # 3. 有豪门/热门叙事
+        has_star = any(kw in body for kw in star_keywords)
+
+        if has_deep_handicap and has_low_form and has_star:
+            has_state_crush_ack = "状态碾压" in body or ("状态下滑" in body and "降" in body)
+            if not has_state_crush_ack:
+                warnings.append({
+                    "rule": "lint_state_crush",
+                    "severity": "WARN",
+                    "match": header,
+                    "message": "豪门/热门方深让但核心状态下滑 → 须写状态碾压预警回应，方向不得锁热门 (V17.4.30)",
+                })
+
+    return warnings
+
+
+def lint_market_divergence(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    跨市场背离预警检测（V17.4.30）。
+    竞彩让球盘与亚盘初盘 ≥1 档背离但未写分歧说明 → WARN。
+    """
+    if day and day < MARKET_DIV_DAY:
+        return []
+    warnings: list[dict] = []
+    for sec in sections:
+        body = sec.get("body", "")
+        header = sec.get("header", "")[:40]
+
+        has_divergence = "跨市场背离" in body or ("竞彩让" in body and "亚盘" in body)
+        if not has_divergence:
+            continue
+
+        has_explanation = "市场分歧说明" in body or "机构分歧" in body or "竞彩深让但亚盘" in body
+        if not has_explanation:
+            warnings.append({
+                "rule": "lint_market_divergence",
+                "severity": "WARN",
+                "match": header,
+                "message": "跨市场背离触发但未写【市场分歧说明】→ 须补 (V17.4.30)",
+            })
+
+    return warnings
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.27 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.30 日闸 lint 工具")
     parser.add_argument('file', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     args = parser.parse_args()

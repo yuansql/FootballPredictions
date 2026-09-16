@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-deep_away_trap.py — V17.4.23 深盘陷阱确认书
+deep_away_trap.py — V17.4.30 深盘陷阱确认书
 
 功能：
 1. 检测客队是否为豪门 + 是否有疲劳/轮换信号
@@ -21,17 +21,24 @@ deep_away_trap.py — V17.4.23 深盘陷阱确认书
 import argparse
 from typing import List, Dict, Optional
 
-# === 豪门名单 ===
+# === 豪门名单（按赛事相对定位动态判定） ===
 BIG_CLUBS = {
+    # 五大联赛
     '曼城', '利物浦', '阿森纳', '曼联', '切尔西',
     '皇马', '皇家马德里', '巴塞罗那', '巴萨', '马竞', '马德里竞技',
     '拜仁', '拜仁慕尼黑', '多特蒙德', '勒沃库森',
     '尤文图斯', '尤文', '国际米兰', '国米', 'AC米兰',
     '巴黎圣日耳曼', '巴黎', 'PSG',
+    # 亚冠/沙特联（在该赛事中按豪门处理）
+    '利雅胜利', '利雅得胜利', '艾納斯', 'Al Nassr',
+    '利雅得新月', '希拉尔', 'Al Hilal',
+    '吉达联合', '伊蒂哈德', 'Al Ittihad',
+    '吉达国民', '阿尔阿赫利', 'Al Ahli',
 }
 
 # === 深盘阈值 ===
 DEEP_AWAY_THRESHOLD = 1.50  # 客胜赔 ≤ 此值视为深盘
+ASIAN_HANDICAP_THRESHOLD = 0.75  # 亚盘客让 ≥ 此值视为深盘
 
 
 def is_big_club(club_name: str) -> bool:
@@ -45,18 +52,25 @@ def is_big_club(club_name: str) -> bool:
 def detect_trap_signals(
     away_club: str,
     sp_a: float,
+    asian_handicap: Optional[float] = None,
+    market_divergence: Optional[str] = None,
     euro_match: Optional[str] = None,
     rotation: Optional[str] = None,
     away_fatigue: Optional[str] = None,
     home_motivation: Optional[str] = None,
 ) -> Dict:
     """
-    深盘陷阱信号检测。
+    深盘陷阱信号检测（V17.4.29 扩展）。
+
+    触发条件（满足任一）：
+    1. 客队豪门 + SP_A ≤ 1.50
+    2. 客队豪门 + 亚盘客让 ≥ 0.75
+    3. 竞彩让球盘与亚盘初盘 ≥ 1 档背离
 
     返回：
         {
             'is_big_club': bool,
-            'is_deep': bool,           # SP_A ≤ 1.50
+            'is_deep': bool,           # SP_A ≤ 1.50 或 亚盘 ≥ 0.75 或 跨市场背离
             'signals': List[str],      # 检测到的风险信号
             'score': int,              # 风险分数（0-5）
             'verdict': str,            # 结论：clean / caution / dirty
@@ -67,7 +81,10 @@ def detect_trap_signals(
     score = 0
 
     is_big = is_big_club(away_club)
-    is_deep = sp_a <= DEEP_AWAY_THRESHOLD
+    is_deep_sp = sp_a <= DEEP_AWAY_THRESHOLD
+    is_deep_ah = asian_handicap is not None and asian_handicap >= ASIAN_HANDICAP_THRESHOLD
+    is_deep_div = market_divergence is not None and len(market_divergence) > 0
+    is_deep = is_deep_sp or is_deep_ah or is_deep_div
 
     if not is_big:
         return {
@@ -78,6 +95,14 @@ def detect_trap_signals(
             'verdict': 'clean',
             'recommendation': '非豪门客场，不触发深盘陷阱检查',
         }
+
+    # === 盘口深度探测器 ===
+    if is_deep_ah:
+        signals.append(f'亚盘深让：客让 {asian_handicap}（≥{ASIAN_HANDICAP_THRESHOLD}）')
+        score += 1
+    if is_deep_div:
+        signals.append(f'跨市场背离：{market_divergence}')
+        score += 2
 
     # === 战意衰减探测器 ===
     if euro_match and ('欧冠' in euro_match or '欧联' in euro_match or '欧战' in euro_match):
