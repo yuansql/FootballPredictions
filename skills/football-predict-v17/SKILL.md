@@ -10,6 +10,7 @@ description: >-
     状态评分硬闸 V17.4.28; BOTH_SCORE 比分补偿; 深盘陷阱亚盘≥0.75/跨市场背离 V17.4.29.
     排除三件套 V17.4.31（情报硬标准/盘口质疑/SP仅参考；禁软排；允排假热）.
     佐料整包 V17.4.32（初盘为锚；水位看路径；SP+让球+Edge+双闸门+降维同屏；禁只看即时SP）.
+    全表防懒见 防偷懒.md（骨架≠模板×N；lint 0场=FAIL）.
     Mandatory 排除|剩余|二次 fixed lines; RMA exclude-bay vs lock-bay split.
   FORCE_SEARCH, match script, λ→λ′ / V15.6 / dual Edge ticket-only.
   Use for 竞彩 fixtures, 球赛预测, 挪超/芬超/瑞超/英超/世界杯 analysis.
@@ -498,6 +499,7 @@ description: >-
 | 人设 | `投注分析专家_人设提示词.txt` | 每次 |
 | 补丁 | `rules/V15.6_patches.txt` + `rules/V15.6_patches.py` | 每次 |
 | 模板 | `output-template.md` | 每次对照输出 |
+| 全表防懒 | `防偷懒.md` | 说「今天全部」/多场 01 时（先于模板×N） |
 | 复盘 | `03-复盘模板.md` | 写 `03-复盘.md` 时 |
 | 样例段 | toutiao `drafts/_templates/01-竞彩分析-V17.4.20-样例段.md` | 01 收据防格+ht_path |
 | 样例 | `完整样例_体彩默认.txt` | 对照格式时 |
@@ -509,6 +511,7 @@ description: >-
 
 ## 作业流（强制顺序）
 
+0. **全表/多场**：先读 [防偷懒.md](防偷懒.md)。禁止模板×N；场场骨架 `排除=`；lint 0 场 = FAIL。  
 1. **WebSearch →【取证清单】**（关键槽≥2 才可介入；含积分/近5/伤停/H2H）  
 2. **【情报叙事】**：伤停·停赛·战意·赛程密度·主客场因素（有源才写，禁编）  
 3. **【球队画像】**：主队 / 客队各一段（形态、火力/防守、风格；写清克制或互咬）  

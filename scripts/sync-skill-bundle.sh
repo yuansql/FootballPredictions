@@ -67,12 +67,14 @@ rm -f \
 # keep package skill body in sync with repo root working copies when present
 [[ -f "$ROOT/SKILL.md" ]] && cp "$ROOT/SKILL.md" "$PKG/SKILL.md"
 [[ -f "$ROOT/output-template.md" ]] && cp "$ROOT/output-template.md" "$PKG/output-template.md"
+[[ -f "$ROOT/防偷懒.md" ]] && cp "$ROOT/防偷懒.md" "$PKG/防偷懒.md"
 [[ -f "$ROOT/SYNC_STAMP.txt" ]] && cp "$ROOT/SYNC_STAMP.txt" "$PKG/SYNC_STAMP.txt"
 
 sync_local_skill() {
   local dest="$1"
   mkdir -p "$dest" "$dest/scripts" "$dest/references"
   cp "$PKG/SKILL.md" "$PKG/output-template.md" "$dest/"
+  [[ -f "$PKG/防偷懒.md" ]] && cp "$PKG/防偷懒.md" "$dest/"
   [[ -f "$PKG/SYNC_STAMP.txt" ]] && cp "$PKG/SYNC_STAMP.txt" "$dest/"
   cp -R "$REF/." "$dest/references/"
   for s in lint_draft.py structure_gate.py deep_away_trap.py red_flag_scanner.py \

@@ -14,6 +14,9 @@ lint_draft.py — V17.4.32 日闸 lint 工具
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
     python3 lint_draft.py /path/to/01-竞彩分析.md --day 2026-09-07
+    python3 lint_draft.py --self-check
+
+解析：标题含 vs/VS，或 周[一二三四五六日]001。0 场 → ERROR（禁止假绿）。
 
 日闸常量：
     STRUCTURE_GATE_DAY = "2026-09-07"
@@ -68,6 +71,19 @@ get_enforced_direction = structure_gate.get_enforced_direction
 parse_sp_line = structure_gate.parse_sp_line
 
 
+MATCH_CODE_RE = re.compile(r'周[一二三四五六日]\d{3}')
+VS_SPLIT_RE = re.compile(r'(?i)\bvs\b')
+_SKIP_HEADERS = ('复盘', '附录', '总体', '模板', '今晚研究', '钉槽', '目录', '精选场次')
+
+
+def is_match_header(header: str) -> bool:
+    """比赛段：vs/VS，或周一～周日+三位编号。"""
+    h = header.strip()
+    if any(k in h for k in _SKIP_HEADERS):
+        return False
+    return 'vs' in h.lower() or bool(MATCH_CODE_RE.search(h))
+
+
 def parse_sections(filepath: str) -> list[dict]:
     """解析 markdown 草稿文件，返回比赛段列表。"""
     with open(filepath, 'r', encoding='utf-8') as f:
@@ -80,12 +96,7 @@ def parse_sections(filepath: str) -> list[dict]:
         if not lines:
             continue
         header = lines[0].strip().lstrip('#').strip()
-        # 跳过非比赛段（复盘/附录/模板/TOP列表等）
-        skip_keywords = ['复盘', '附录', '总体', '模板', '今晚研究', '钉槽', '目录']
-        if any(k in header for k in skip_keywords):
-            continue
-        # 比赛段通常含 "vs" 或编号如 "周五001"
-        if 'vs' not in header and not re.search(r'周[五六日]\d{3}', header):
+        if not is_match_header(header):
             continue
         sections.append({
             'header': header,
@@ -670,32 +681,41 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     print("-" * 60)
 
     all_warnings = []
+    if not sections:
+        all_warnings.append({
+            'rule': 'lint_parse_sections',
+            'severity': 'ERROR',
+            'match': filepath,
+            'message': '解析到 0 场（标题须含 vs/VS 或 周[一二三四五六日]001；0场全绿=FAIL）',
+        })
+        print(f"\n[lint_parse_sections] 发现 1 个问题:")
+        print(f"  [ERROR] {filepath[:50]:50s} {all_warnings[0]['message']}")
+    else:
+        rules = [
+            ("lint_low_structure_weld", lint_low_structure_weld),
+            ("lint_02_atom_text", lint_02_atom_text),
+            ("lint_02_must_direction", lint_02_must_direction),
+            ("lint_lean_pack", lint_lean_pack),
+            ("lint_exclude_three_step", lint_exclude_three_step),
+            ("lint_exclude_intel_gate", lint_exclude_intel_gate),
+            ("lint_seasoning_pack", lint_seasoning_pack),
+            ("lint_direction_score_consistency", lint_direction_score_consistency),
+            ("lint_deep_away_trap", lint_deep_away_trap),
+            ("lint_form_gate", lint_form_gate),
+            ("lint_both_score", lint_both_score),
+            ("lint_state_crush", lint_state_crush),
+            ("lint_market_divergence", lint_market_divergence),
+        ]
 
-    rules = [
-        ("lint_low_structure_weld", lint_low_structure_weld),
-        ("lint_02_atom_text", lint_02_atom_text),
-        ("lint_02_must_direction", lint_02_must_direction),
-        ("lint_lean_pack", lint_lean_pack),
-        ("lint_exclude_three_step", lint_exclude_three_step),
-        ("lint_exclude_intel_gate", lint_exclude_intel_gate),
-        ("lint_seasoning_pack", lint_seasoning_pack),
-        ("lint_direction_score_consistency", lint_direction_score_consistency),
-        ("lint_deep_away_trap", lint_deep_away_trap),
-        ("lint_form_gate", lint_form_gate),
-        ("lint_both_score", lint_both_score),
-        ("lint_state_crush", lint_state_crush),
-        ("lint_market_divergence", lint_market_divergence),
-    ]
-
-    for name, fn in rules:
-        w = fn(sections, day)
-        all_warnings.extend(w)
-        if w:
-            print(f"\n[{name}] 发现 {len(w)} 个问题:")
-            for item in w:
-                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
-        else:
-            print(f"\n[{name}] ✓ 通过")
+        for name, fn in rules:
+            w = fn(sections, day)
+            all_warnings.extend(w)
+            if w:
+                print(f"\n[{name}] 发现 {len(w)} 个问题:")
+                for item in w:
+                    print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+            else:
+                print(f"\n[{name}] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)
@@ -741,12 +761,11 @@ def lint_deep_away_trap(sections: list[dict], day: str | None = None) -> list[di
         header = sec['header']
         body = sec.get('body', '')
 
-        # 提取客队（从标题 "主队 vs 客队"）
+        # 提取客队（从标题 "主队 vs 客队"；兼容 VS）
         away = None
-        if 'vs' in header:
-            parts = header.split('vs')
-            if len(parts) >= 2:
-                away = parts[1].strip().split('｜')[0].strip()
+        parts = VS_SPLIT_RE.split(header)
+        if len(parts) >= 2:
+            away = parts[1].strip().split('｜')[0].strip()
 
         if not away or not is_big_club(away):
             continue
@@ -1003,12 +1022,29 @@ def lint_market_divergence(sections: list[dict], day: str | None = None) -> list
     return warnings
 
 
+def _self_check() -> None:
+    assert is_match_header('第一场 · 周四004 贝蒂斯 VS 赫塔费')
+    assert is_match_header('周五001 京都 vs 柏太阳神')
+    assert is_match_header('周一003 主 vs 客')
+    assert not is_match_header('精选场次')
+    assert not is_match_header('今晚研究 TOP')
+    print('self-check parse headers: ok')
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="V17.4.32 日闸 lint 工具")
-    parser.add_argument('file', help='草稿 markdown 文件路径')
+    parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
+    parser.add_argument('--self-check', action='store_true', help='解析标题自检')
     args = parser.parse_args()
 
-    run_lint(args.file, args.day)
+    if args.self_check:
+        _self_check()
+        sys.exit(0)
+    if not args.file:
+        parser.error('需要草稿路径，或用 --self-check')
+
+    report = run_lint(args.file, args.day)
+    sys.exit(1 if report['errors'] else 0)
 
 
