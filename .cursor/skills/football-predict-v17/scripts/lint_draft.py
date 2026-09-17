@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.30 日闸 lint 工具
+lint_draft.py — V17.4.31 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -8,6 +8,7 @@ lint_draft.py — V17.4.30 日闸 lint 工具
 3. lint_02_must_direction — 验证每场方向原子必给（4.22.3）
 4. lint_lean_pack — 验证倾向 ∈ 允许集（4.22.4）
 5. lint_exclude_three_step — 验证 排除|剩余|二次 固定行（4.27）
+6. lint_exclude_intel_gate — 排除三件套：排胜负边须硬情报或盘口质疑（4.31）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -18,6 +19,7 @@ lint_draft.py — V17.4.30 日闸 lint 工具
     DIR_MUST_DAY = "2026-09-02"
     LEAN_DAY = "2026-09-04"
     EXCLUDE_DAY = "2026-09-14"
+    EXCLUDE_INTEL_DAY = "2026-09-17"
 """
 
 import sys
@@ -32,10 +34,21 @@ LEAN_DAY = "2026-09-04"
 ICS_MIN_DAY = "2026-09-07"   # ICS≥70 或 CAUTION 从这天起检查
 RED_FLAG_DAY = "2026-09-07"  # 红旗清单从这天起检查
 EXCLUDE_DAY = "2026-09-14"   # 排除|剩余|二次固定行
+EXCLUDE_INTEL_DAY = "2026-09-17"  # 排除三件套：硬情报/盘口质疑
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
 MARKET_DIV_DAY = "2026-09-16"  # 跨市场背离预警从这天起检查
+
+
+# 排除三件套：硬情报 / 盘口质疑 / 软词黑名单
+EXCLUDE_HARD_RE = re.compile(
+    r'伤停|轮换|状态|战意|连败|克制|板凳|阵容|留力|分心|高原|深度|保级|争冠|残阵|停赛|主力缺|零封|火力'
+)
+EXCLUDE_MARKET_RE = re.compile(r'背离|撤热|异动|假热|亚盘|水位|降赔|升赔|初盘|终盘')
+EXCLUDE_SOFT_ONLY_RE = re.compile(
+    r'主场优势|主场有优势|经验|名气|抵消|纸面实力|纸面强|传统强队'
+)
 
 
 # === 导入 structure_gate ===
@@ -429,6 +442,81 @@ def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> lis
     return warnings
 
 
+def lint_exclude_intel_gate(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.31 排除三件套：排除=主胜/客胜 时，理由须含硬情报词，或质疑=含盘口词。
+    禁止仅软词（主场优势/经验/名气/抵消…）排胜负边。排除=平 不强制硬词。
+    """
+    if day and day < EXCLUDE_INTEL_DAY:
+        return []
+
+    warnings = []
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        if '排除=' not in blob and '排除 =' not in blob:
+            continue
+
+        m = re.search(
+            r'排除\s*=\s*(主胜|平|客胜)\s*｜\s*理由\s*=\s*([^｜\n]+)(?:\s*｜\s*质疑\s*=\s*([^｜\n]+))?',
+            blob,
+        )
+        if not m:
+            # 兼容无「质疑=」旧行：排除=X｜理由=Y
+            m = re.search(r'排除\s*=\s*(主胜|平|客胜)\s*｜\s*理由\s*=\s*([^｜\n]+)', blob)
+        if not m:
+            continue
+
+        exclude = m.group(1)
+        reason = m.group(2).strip()
+        challenge = (m.group(3).strip() if m.lastindex >= 3 and m.group(3) else '')
+
+        if exclude == '平':
+            if not reason or reason in ('·', '…', '-'):
+                warnings.append({
+                    'rule': 'lint_exclude_intel_gate',
+                    'severity': 'ERROR',
+                    'match': header,
+                    'message': '排除=平 仍须写非空理由（V17.4.31）',
+                })
+            continue
+
+        # 排主胜/客胜
+        has_hard = bool(EXCLUDE_HARD_RE.search(reason))
+        has_market = bool(EXCLUDE_MARKET_RE.search(reason) or EXCLUDE_MARKET_RE.search(challenge))
+        # 质疑=无 不算市场质疑
+        if challenge in ('无', '·', '…', '-', ''):
+            challenge_ok = False
+        else:
+            challenge_ok = bool(EXCLUDE_MARKET_RE.search(challenge)) or has_market
+
+        soft_hit = bool(EXCLUDE_SOFT_ONLY_RE.search(reason))
+        if soft_hit and not has_hard and not challenge_ok:
+            warnings.append({
+                'rule': 'lint_exclude_intel_gate',
+                'severity': 'ERROR',
+                'match': header,
+                'message': (
+                    f'排除={exclude} 理由「{reason}」像软词排胜负边；'
+                    f'须硬情报（伤停/轮换/状态/战意/连败/克制/板凳…）或质疑=盘口词 (V17.4.31)'
+                ),
+            })
+            continue
+
+        if not has_hard and not challenge_ok:
+            warnings.append({
+                'rule': 'lint_exclude_intel_gate',
+                'severity': 'ERROR',
+                'match': header,
+                'message': (
+                    f'排除={exclude} 缺硬情报词且无盘口质疑；'
+                    f'SP 不得单独决定排除 (V17.4.31 三件套)'
+                ),
+            })
+
+    return warnings
+
+
 def infer_winner_from_score(score: str) -> str | None:
     """从比分推断1X2结果。如 '2-1'→主胜, '1-2'→客胜, '1-1'→平。"""
     score = score.strip()
@@ -534,7 +622,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -545,6 +633,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         ("lint_02_must_direction", lint_02_must_direction),
         ("lint_lean_pack", lint_lean_pack),
         ("lint_exclude_three_step", lint_exclude_three_step),
+        ("lint_exclude_intel_gate", lint_exclude_intel_gate),
         ("lint_direction_score_consistency", lint_direction_score_consistency),
         ("lint_deep_away_trap", lint_deep_away_trap),
         ("lint_form_gate", lint_form_gate),
@@ -870,7 +959,7 @@ def lint_market_divergence(sections: list[dict], day: str | None = None) -> list
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.30 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.31 日闸 lint 工具")
     parser.add_argument('file', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     args = parser.parse_args()
