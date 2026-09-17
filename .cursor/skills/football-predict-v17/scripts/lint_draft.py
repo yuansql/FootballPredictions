@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.31 日闸 lint 工具
+lint_draft.py — V17.4.32 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -9,6 +9,7 @@ lint_draft.py — V17.4.31 日闸 lint 工具
 4. lint_lean_pack — 验证倾向 ∈ 允许集（4.22.4）
 5. lint_exclude_three_step — 验证 排除|剩余|二次 固定行（4.27）
 6. lint_exclude_intel_gate — 排除三件套：排胜负边须硬情报或盘口质疑（4.31）
+7. lint_seasoning_pack — 佐料整包：可介入须见初盘+水位（4.32）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -20,6 +21,7 @@ lint_draft.py — V17.4.31 日闸 lint 工具
     LEAN_DAY = "2026-09-04"
     EXCLUDE_DAY = "2026-09-14"
     EXCLUDE_INTEL_DAY = "2026-09-17"
+    SEASONING_DAY = "2026-09-17"
 """
 
 import sys
@@ -35,6 +37,7 @@ ICS_MIN_DAY = "2026-09-07"   # ICS≥70 或 CAUTION 从这天起检查
 RED_FLAG_DAY = "2026-09-07"  # 红旗清单从这天起检查
 EXCLUDE_DAY = "2026-09-14"   # 排除|剩余|二次固定行
 EXCLUDE_INTEL_DAY = "2026-09-17"  # 排除三件套：硬情报/盘口质疑
+SEASONING_DAY = "2026-09-17"  # 佐料整包：初盘为锚
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -517,6 +520,47 @@ def lint_exclude_intel_gate(sections: list[dict], day: str | None = None) -> lis
     return warnings
 
 
+def lint_seasoning_pack(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.32 佐料整包：【出票】可介入/试探 时，须同屏有初盘锚 + 水位路径标记。
+    观望场不强制（仍鼓励写）。
+    """
+    if day and day < SEASONING_DAY:
+        return []
+
+    warnings = []
+    ticket_intervene = re.compile(r'【出票】[^\n]*(可介入|可试探|试探)')
+    has_open = re.compile(r'初盘\s*=')
+    has_water = re.compile(r'水位路径\s*=|水位\s*=')
+
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        if not ticket_intervene.search(blob):
+            continue
+        if '不荐' in blob and re.search(r'【出票】[^\n]*不荐', blob):
+            # 同行既可介入又不荐极少；若明确不荐则跳过
+            if re.search(r'【出票】\s*不荐', blob) and not re.search(r'【出票】[^\n]*可介入', blob):
+                continue
+        missing = []
+        if not has_open.search(blob):
+            missing.append('初盘=')
+        if not has_water.search(blob):
+            missing.append('水位路径=')
+        if missing:
+            warnings.append({
+                'rule': 'lint_seasoning_pack',
+                'severity': 'ERROR',
+                'match': header,
+                'message': (
+                    f'出票可介入但缺佐料整包标记 {",".join(missing)}；'
+                    f'初盘为锚、水位看路径，禁只报即时SP (V17.4.32)'
+                ),
+            })
+
+    return warnings
+
+
 def infer_winner_from_score(score: str) -> str | None:
     """从比分推断1X2结果。如 '2-1'→主胜, '1-2'→客胜, '1-1'→平。"""
     score = score.strip()
@@ -622,7 +666,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -634,6 +678,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         ("lint_lean_pack", lint_lean_pack),
         ("lint_exclude_three_step", lint_exclude_three_step),
         ("lint_exclude_intel_gate", lint_exclude_intel_gate),
+        ("lint_seasoning_pack", lint_seasoning_pack),
         ("lint_direction_score_consistency", lint_direction_score_consistency),
         ("lint_deep_away_trap", lint_deep_away_trap),
         ("lint_form_gate", lint_form_gate),
@@ -959,7 +1004,7 @@ def lint_market_divergence(sections: list[dict], day: str | None = None) -> list
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.31 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.32 日闸 lint 工具")
     parser.add_argument('file', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     args = parser.parse_args()
