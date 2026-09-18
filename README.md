@@ -1,10 +1,11 @@
-# FootballPredictions · 2足球框架 V17.4.27
+# FootballPredictions · 2足球框架 V17.4.36
 
 体彩/竞彩足球预测框架 + 可分发 Agent Skill。  
-**当前执行版 = V17.4.27**（`SKILL.md` / `output-template.md` / `references/03-复盘模板.md`）。
+**当前执行版 = V17.4.36**（`SKILL.md` / `output-template.md` / `references/03-复盘模板.md`）。
 
 主菜：伤停/战意/形态/剧本定方向。佐料：盘口/SP/Edge 只做出票闸。  
-方向必须给（锁\* / 主不败 / 客不败）；禁胶着；`01` 场场 `排除=`｜`剩余=`｜`二次=`。
+方向必须给（锁\* / 主不败 / 客不败）；禁胶着；`01` 场场 `排除=`｜`剩余=`｜`二次=`。  
+**V17.4.36**：胜平负未开售 / 只开让球场 → 出票只映射让球；二串一 A/B 分区。
 
 **完整用法 → [使用.md](./使用.md)** · 作业细则 → [SKILL.md](./SKILL.md)
 

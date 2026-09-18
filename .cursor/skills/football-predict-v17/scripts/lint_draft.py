@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.34 日闸 lint 工具
+lint_draft.py — V17.4.36 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -13,6 +13,7 @@ lint_draft.py — V17.4.34 日闸 lint 工具
 8. lint_euro_deep_away — 欧战深盘客：欧战场锁客须见闸行（4.33）
 9. lint_dual_debut_lock — 双新军锁主：双新军叙事+锁主须见闸行（4.33）
 10. lint_summary_table — 全场汇总表：编号/排除/推方向/单子倾向/推比分/推进球（4.34）
+11. lint_handicap_only_channel — 只开让球：未开售胜平负时映射禁写单买主胜等（4.36）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -31,6 +32,7 @@ lint_draft.py — V17.4.34 日闸 lint 工具
     EURO_DEEP_AWAY_DAY = "2026-09-18"
     DUAL_DEBUT_DAY = "2026-09-18"
     SUMMARY_TABLE_DAY = "2026-09-18"
+    HC_ONLY_DAY = "2026-09-18"
 """
 
 import sys
@@ -50,6 +52,7 @@ SEASONING_DAY = "2026-09-17"  # 佐料整包：初盘为锚
 EURO_DEEP_AWAY_DAY = "2026-09-18"  # 欧战深盘客闸 soft#8
 DUAL_DEBUT_DAY = "2026-09-18"  # 双新军锁主闸 soft#9
 SUMMARY_TABLE_DAY = "2026-09-18"  # 全场汇总表（排除/推方向/单子倾向/比分/进球）
+HC_ONLY_DAY = "2026-09-18"  # 只开让球分通道（胜平负未开售）
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -651,6 +654,58 @@ def lint_dual_debut_lock(sections: list[dict], day: str | None = None) -> list[d
     return warnings
 
 
+def lint_handicap_only_channel(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.36：胜平负未开售 / 只开让球场，【出票】映射禁止写胜平负「单买主胜/复式…」；
+    须见 出票通道=让球 或 映射含「让球」。
+    """
+    if day and day < HC_ONLY_DAY:
+        return []
+
+    unsold_re = re.compile(
+        r'胜平负未开售|只开让球|JC_SP\s*=\s*未开售|JC_SP=胜平负未开售'
+    )
+    # 映射行里出现胜平负买法且同行/同出票块没有「让球」
+    spf_buy_re = re.compile(
+        r'映射[^\n]*(?:单买\s*(?:主胜|客胜|平)|复式\s*(?:主胜|客胜))'
+    )
+    channel_ok_re = re.compile(r'出票通道\s*=\s*让球|映射[^\n]*让球')
+
+    warnings = []
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        if not unsold_re.search(blob):
+            continue
+        # 抽出票相关行
+        ticket_lines = [
+            ln for ln in sec['lines']
+            if '【出票】' in ln or '映射' in ln or '出票通道' in ln
+        ]
+        ticket_blob = '\n'.join(ticket_lines) if ticket_lines else blob
+        if spf_buy_re.search(ticket_blob) and not channel_ok_re.search(ticket_blob):
+            warnings.append({
+                'rule': 'lint_handicap_only_channel',
+                'severity': 'ERROR',
+                'match': header,
+                'message': (
+                    '胜平负未开售/只开让球场，【出票】映射禁止写单买主胜/复式胜平负；'
+                    '须 出票通道=让球 且映射写让球主胜等 (V17.4.36)'
+                ),
+            })
+            continue
+        if not channel_ok_re.search(ticket_blob):
+            warnings.append({
+                'rule': 'lint_handicap_only_channel',
+                'severity': 'ERROR',
+                'match': header,
+                'message': (
+                    '胜平负未开售/只开让球场须写 出票通道=让球 或 映射含让球 (V17.4.36)'
+                ),
+            })
+    return warnings
+
+
 def lint_summary_table(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
     """
     V17.4.34：认真拆 ≥1 场时，全文须有固定列表头的全场汇总表。
@@ -817,7 +872,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -841,6 +896,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
             ("lint_seasoning_pack", lint_seasoning_pack),
             ("lint_euro_deep_away", lint_euro_deep_away),
             ("lint_dual_debut_lock", lint_dual_debut_lock),
+            ("lint_handicap_only_channel", lint_handicap_only_channel),
             ("lint_direction_score_consistency", lint_direction_score_consistency),
             ("lint_deep_away_trap", lint_deep_away_trap),
             ("lint_form_gate", lint_form_gate),
