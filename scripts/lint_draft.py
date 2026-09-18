@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.33 日闸 lint 工具
+lint_draft.py — V17.4.34 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -12,6 +12,7 @@ lint_draft.py — V17.4.33 日闸 lint 工具
 7. lint_seasoning_pack — 佐料整包：可介入须见初盘+水位（4.32）
 8. lint_euro_deep_away — 欧战深盘客：欧战场锁客须见闸行（4.33）
 9. lint_dual_debut_lock — 双新军锁主：双新军叙事+锁主须见闸行（4.33）
+10. lint_summary_table — 全场汇总表：编号/排除/推方向/单子倾向/推比分/推进球（4.34）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -29,6 +30,7 @@ lint_draft.py — V17.4.33 日闸 lint 工具
     SEASONING_DAY = "2026-09-17"
     EURO_DEEP_AWAY_DAY = "2026-09-18"
     DUAL_DEBUT_DAY = "2026-09-18"
+    SUMMARY_TABLE_DAY = "2026-09-18"
 """
 
 import sys
@@ -47,6 +49,7 @@ EXCLUDE_INTEL_DAY = "2026-09-17"  # 排除三件套：硬情报/盘口质疑
 SEASONING_DAY = "2026-09-17"  # 佐料整包：初盘为锚
 EURO_DEEP_AWAY_DAY = "2026-09-18"  # 欧战深盘客闸 soft#8
 DUAL_DEBUT_DAY = "2026-09-18"  # 双新军锁主闸 soft#9
+SUMMARY_TABLE_DAY = "2026-09-18"  # 全场汇总表（排除/推方向/单子倾向/比分/进球）
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -648,6 +651,67 @@ def lint_dual_debut_lock(sections: list[dict], day: str | None = None) -> list[d
     return warnings
 
 
+def lint_summary_table(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
+    """
+    V17.4.34：认真拆 ≥1 场时，全文须有固定列表头的全场汇总表。
+    必含列：编号、对阵、排除、推方向、单子倾向、推比分（或主/次/防）、推进球（或进球）。
+    """
+    if day and day < SUMMARY_TABLE_DAY:
+        return []
+    if len(sections) < 1:
+        return []
+
+    path = filepath
+    if not path:
+        return []
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except OSError:
+        return [{
+            'rule': 'lint_summary_table',
+            'severity': 'ERROR',
+            'match': path,
+            'message': '无法读取文件做汇总表检查',
+        }]
+
+    warnings = []
+    # Markdown 表头一行内同时出现关键列名
+    header_ok = bool(re.search(
+        r'\|\s*编号\s*\|[^\n]*对阵[^\n]*排除[^\n]*推方向[^\n]*单子倾向[^\n]*(推比分|主\s*/\s*次\s*/\s*防)[^\n]*(推进球|进球)',
+        content,
+    ))
+    # 兼容无管道、空格分隔声明
+    if not header_ok:
+        header_ok = bool(re.search(
+            r'编号\s+对阵\s+排除\s+推方向\s+单子倾向\s+推比分',
+            content,
+        )) and ('推进球' in content or '进球' in content)
+
+    if not header_ok:
+        warnings.append({
+            'rule': 'lint_summary_table',
+            'severity': 'ERROR',
+            'match': '全文',
+            'message': (
+                '缺【全场汇总表】固定列：编号|对阵|排除|推方向|单子倾向|推比分（主/次/防）|推进球 '
+                '(V17.4.34；须在 TOP/二串一之前)'
+            ),
+        })
+        return warnings
+
+    # 粗检：表体行数（以 | 周四/周一… 或纯编号行）不少于认真拆场数的一半（防空表）
+    body_rows = len(re.findall(r'\|\s*(周[一二三四五六日]\d{3}|\d{3})\s*\|', content))
+    if body_rows < max(1, len(sections) // 2):
+        warnings.append({
+            'rule': 'lint_summary_table',
+            'severity': 'WARN',
+            'match': '全文',
+            'message': f'汇总表数据行偏少（约{body_rows}行 vs 解析{len(sections)}场），请核对是否场场入表',
+        })
+    return warnings
+
+
 def infer_winner_from_score(score: str) -> str | None:
     """从比分推断1X2结果。如 '2-1'→主胜, '1-2'→客胜, '1-1'→平。"""
     score = score.strip()
@@ -753,7 +817,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -794,6 +858,16 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                     print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
             else:
                 print(f"\n[{name}] ✓ 通过")
+
+        # 汇总表需读全文（表在场次段外）
+        w_sum = lint_summary_table(sections, day, filepath=filepath)
+        all_warnings.extend(w_sum)
+        if w_sum:
+            print(f"\n[lint_summary_table] 发现 {len(w_sum)} 个问题:")
+            for item in w_sum:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_summary_table] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)
@@ -1110,7 +1184,7 @@ def _self_check() -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.33 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.34 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
