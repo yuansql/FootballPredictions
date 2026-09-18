@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.32 日闸 lint 工具
+lint_draft.py — V17.4.33 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -10,6 +10,8 @@ lint_draft.py — V17.4.32 日闸 lint 工具
 5. lint_exclude_three_step — 验证 排除|剩余|二次 固定行（4.27）
 6. lint_exclude_intel_gate — 排除三件套：排胜负边须硬情报或盘口质疑（4.31）
 7. lint_seasoning_pack — 佐料整包：可介入须见初盘+水位（4.32）
+8. lint_euro_deep_away — 欧战深盘客：欧战场锁客须见闸行（4.33）
+9. lint_dual_debut_lock — 双新军锁主：双新军叙事+锁主须见闸行（4.33）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -25,6 +27,8 @@ lint_draft.py — V17.4.32 日闸 lint 工具
     EXCLUDE_DAY = "2026-09-14"
     EXCLUDE_INTEL_DAY = "2026-09-17"
     SEASONING_DAY = "2026-09-17"
+    EURO_DEEP_AWAY_DAY = "2026-09-18"
+    DUAL_DEBUT_DAY = "2026-09-18"
 """
 
 import sys
@@ -41,6 +45,8 @@ RED_FLAG_DAY = "2026-09-07"  # 红旗清单从这天起检查
 EXCLUDE_DAY = "2026-09-14"   # 排除|剩余|二次固定行
 EXCLUDE_INTEL_DAY = "2026-09-17"  # 排除三件套：硬情报/盘口质疑
 SEASONING_DAY = "2026-09-17"  # 佐料整包：初盘为锚
+EURO_DEEP_AWAY_DAY = "2026-09-18"  # 欧战深盘客闸 soft#8
+DUAL_DEBUT_DAY = "2026-09-18"  # 双新军锁主闸 soft#9
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -572,6 +578,76 @@ def lint_seasoning_pack(sections: list[dict], day: str | None = None) -> list[di
     return warnings
 
 
+def lint_euro_deep_away(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.33 soft#8：欧冠/欧联/欧协场若方向=锁客，须写【欧战深盘客闸】行。
+    （触发阈值靠分析时判断；lint 只拦「欧战场锁客却没亮闸」。）
+    """
+    if day and day < EURO_DEEP_AWAY_DAY:
+        return []
+
+    euro_re = re.compile(r'欧联|欧冠|欧协|欧罗巴|Europa|UCL|UEL')
+    lock_away_re = re.compile(r'方向\s*=\s*锁客|二次\s*=[^\n]*→\s*锁客')
+    gate_re = re.compile(r'欧战深盘客闸|soft#8')
+
+    warnings = []
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        if not euro_re.search(header) and not euro_re.search(blob):
+            continue
+        if not lock_away_re.search(blob):
+            continue
+        if gate_re.search(blob):
+            continue
+        warnings.append({
+            'rule': 'lint_euro_deep_away',
+            'severity': 'ERROR',
+            'match': header,
+            'message': (
+                '欧战场写了锁客，须写【欧战深盘客闸】触发=是|否（V17.4.33 soft#8；'
+                '默认客不败，豁免锁客须写豁免=）'
+            ),
+        })
+    return warnings
+
+
+def lint_dual_debut_lock(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.33 soft#9：出现双新军/双方首秀叙事且方向=锁主时，须写【双新军锁主闸】。
+    """
+    if day and day < DUAL_DEBUT_DAY:
+        return []
+
+    debut_re = re.compile(
+        r'双新军|双方.{0,12}(首秀|新军)|欧战新军.{0,20}欧战新军|'
+        r'队史首次|联赛阶段新军|双方均为.{0,10}新军'
+    )
+    lock_home_re = re.compile(r'方向\s*=\s*锁主|二次\s*=[^\n]*→\s*锁主')
+    gate_re = re.compile(r'双新军锁主闸|soft#9')
+
+    warnings = []
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        if not debut_re.search(blob):
+            continue
+        if not lock_home_re.search(blob):
+            continue
+        if gate_re.search(blob):
+            continue
+        warnings.append({
+            'rule': 'lint_dual_debut_lock',
+            'severity': 'ERROR',
+            'match': header,
+            'message': (
+                '双新军/双方首秀叙事下写了锁主，须写【双新军锁主闸】触发=是｜降主不败 '
+                '(V17.4.33 soft#9)'
+            ),
+        })
+    return warnings
+
+
 def infer_winner_from_score(score: str) -> str | None:
     """从比分推断1X2结果。如 '2-1'→主胜, '1-2'→客胜, '1-1'→平。"""
     score = score.strip()
@@ -677,7 +753,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -699,6 +775,8 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
             ("lint_exclude_three_step", lint_exclude_three_step),
             ("lint_exclude_intel_gate", lint_exclude_intel_gate),
             ("lint_seasoning_pack", lint_seasoning_pack),
+            ("lint_euro_deep_away", lint_euro_deep_away),
+            ("lint_dual_debut_lock", lint_dual_debut_lock),
             ("lint_direction_score_consistency", lint_direction_score_consistency),
             ("lint_deep_away_trap", lint_deep_away_trap),
             ("lint_form_gate", lint_form_gate),
@@ -1032,7 +1110,7 @@ def _self_check() -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.32 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.33 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
