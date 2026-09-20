@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.36 日闸 lint 工具
+lint_draft.py — V17.4.37 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -14,6 +14,7 @@ lint_draft.py — V17.4.36 日闸 lint 工具
 9. lint_dual_debut_lock — 双新军锁主：双新军叙事+锁主须见闸行（4.33）
 10. lint_summary_table — 全场汇总表：编号/排除/推方向/单子倾向/推比分/推进球（4.34）
 11. lint_handicap_only_channel — 只开让球：未开售胜平负时映射禁写单买主胜等（4.36）
+12. lint_cold_upset_banner — 冷门预防统一亮牌：场场【冷门预防】触发=是|否（4.37）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -33,6 +34,7 @@ lint_draft.py — V17.4.36 日闸 lint 工具
     DUAL_DEBUT_DAY = "2026-09-18"
     SUMMARY_TABLE_DAY = "2026-09-18"
     HC_ONLY_DAY = "2026-09-18"
+    COLD_UPSET_DAY = "2026-09-20"
 """
 
 import sys
@@ -53,6 +55,7 @@ EURO_DEEP_AWAY_DAY = "2026-09-18"  # 欧战深盘客闸 soft#8
 DUAL_DEBUT_DAY = "2026-09-18"  # 双新军锁主闸 soft#9
 SUMMARY_TABLE_DAY = "2026-09-18"  # 全场汇总表（排除/推方向/单子倾向/比分/进球）
 HC_ONLY_DAY = "2026-09-18"  # 只开让球分通道（胜平负未开售）
+COLD_UPSET_DAY = "2026-09-20"  # 冷门预防统一亮牌
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -706,6 +709,76 @@ def lint_handicap_only_channel(sections: list[dict], day: str | None = None) -> 
     return warnings
 
 
+def lint_cold_upset_banner(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.37：场场须【冷门预防】触发=是|否。
+    专闸已亮灯时禁止写触发=否；触发=是须命中= + 动作=。
+    """
+    if day and day < COLD_UPSET_DAY:
+        return []
+
+    banner_re = re.compile(r'【冷门预防】[^\n]*')
+    trigger_yes = re.compile(r'触发\s*=\s*是')
+    trigger_no = re.compile(r'触发\s*=\s*否')
+    hit_re = re.compile(r'命中\s*=')
+    action_re = re.compile(r'动作\s*=')
+
+    lit_patterns = [
+        (re.compile(r'【欧战深盘客闸】[^\n]*触发\s*=\s*是'), '欧战深盘客'),
+        (re.compile(r'【双新军锁主闸】[^\n]*触发\s*=\s*是'), '双新军锁主'),
+        (re.compile(r'verdict\s*=\s*(?:caution|dirty)', re.I), '深盘陷阱'),
+        (re.compile(r'【状态碾压[^\n]*触发\s*=\s*是|状态碾压[^\n]*触发\s*=\s*是'), '状态碾压'),
+        (re.compile(r'【跨市场背离[^\n]*触发\s*=\s*是|跨市场背离[^\n]*触发\s*=\s*是'), '跨市场背离'),
+        (re.compile(r'排除\s*=[^\n]*假热'), '假热'),
+        (re.compile(r'深让降维|深让锁主降维'), '深让降维'),
+    ]
+
+    warnings = []
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        m = banner_re.search(blob)
+        if not m:
+            warnings.append({
+                'rule': 'lint_cold_upset_banner',
+                'severity': 'ERROR',
+                'match': header,
+                'message': '须写【冷门预防】触发=是|否（V17.4.37 统一亮牌）',
+            })
+            continue
+        line = m.group(0)
+        yes = bool(trigger_yes.search(line))
+        no = bool(trigger_no.search(line))
+        if not yes and not no:
+            warnings.append({
+                'rule': 'lint_cold_upset_banner',
+                'severity': 'ERROR',
+                'match': header,
+                'message': '【冷门预防】须含 触发=是 或 触发=否 (V17.4.37)',
+            })
+            continue
+        if yes:
+            if not hit_re.search(line) or not action_re.search(line):
+                warnings.append({
+                    'rule': 'lint_cold_upset_banner',
+                    'severity': 'ERROR',
+                    'match': header,
+                    'message': '【冷门预防】触发=是 须写 命中= 与 动作= (V17.4.37)',
+                })
+        lit_hits = [name for pat, name in lit_patterns if pat.search(blob)]
+        if lit_hits and no:
+            warnings.append({
+                'rule': 'lint_cold_upset_banner',
+                'severity': 'ERROR',
+                'match': header,
+                'message': (
+                    f'专闸已亮（{",".join(lit_hits)}）却写【冷门预防】触发=否；'
+                    '须触发=是并命中点名 (V17.4.37)'
+                ),
+            })
+    return warnings
+
+
 def lint_summary_table(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
     """
     V17.4.34：认真拆 ≥1 场时，全文须有固定列表头的全场汇总表。
@@ -872,7 +945,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -897,6 +970,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
             ("lint_euro_deep_away", lint_euro_deep_away),
             ("lint_dual_debut_lock", lint_dual_debut_lock),
             ("lint_handicap_only_channel", lint_handicap_only_channel),
+            ("lint_cold_upset_banner", lint_cold_upset_banner),
             ("lint_direction_score_consistency", lint_direction_score_consistency),
             ("lint_deep_away_trap", lint_deep_away_trap),
             ("lint_form_gate", lint_form_gate),

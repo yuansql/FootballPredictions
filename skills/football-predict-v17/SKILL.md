@@ -1,7 +1,7 @@
 ---
 name: football-predict-v17
 description: >-
-  Executes AQQ 2足球框架 V17.4.36 football predictions (体彩 default unless 北单).
+  Executes AQQ 2足球框架 V17.4.37 football predictions (体彩 default unless 北单).
   INTEL_FIRST slim pack + dual recommend: research 5★ (direction required;
   goals required; score if likely). Direction-first weld permit (反剧本收据) before TOP;
   RMA dual-bay; per-score Top3; receipt ±1-goal 防 bind; HT/FT opening path;
@@ -14,13 +14,14 @@ description: >-
     全场汇总表 V17.4.34（编号/对阵/排除/推方向/单子倾向/推比分/推进球；分析后必出）.
     汇总表权威链 V17.4.35（复盘单子倾向仓同屏；二串一/稳单腿取表；锁*表内倾向必填）.
     只开让球分通道 V17.4.36（胜平负未开售→出票只映射让球；二串一胜平负腿禁用）.
+    冷门预防统一亮牌 V17.4.37（场场【冷门预防】触发=是|否；不改专闸动作）.
     全表防懒见 防偷懒.md（骨架≠模板×N；lint 0场=FAIL）.
     Mandatory 排除|剩余|二次 fixed lines; RMA exclude-bay vs lock-bay split.
   FORCE_SEARCH, match script, λ→λ′ / V15.6 / dual Edge ticket-only.
   Use for 竞彩 fixtures, 球赛预测, 挪超/芬超/瑞超/英超/世界杯 analysis.
 ---
 
-# 2足球框架 V17.4.36 · 情报优先执行器（精简包 · 双轨推荐）
+# 2足球框架 V17.4.37 · 情报优先执行器（精简包 · 双轨推荐）
 
 ## 总原则（最高优先）
 
@@ -105,6 +106,28 @@ description: >-
 
 **日闸**：`lint_draft.py` `HC_ONLY_DAY=2026-09-18`（`lint_handicap_only_channel`）。  
 来源：09-18 亲爱的纠正「有些比赛只开了让球没有开胜平负，注意看」+ 周五008 拜仁。
+
+### 冷门预防统一亮牌（V17.4.37 · 2026-09-20 · 瘦身版）
+
+**怕什么**：深盘陷阱 / 状态碾压 / 跨市场背离 / 欧战深盘客 / 假热 等闸散落，写场时漏看，复盘时难对账。  
+**定什么**：**不新建动作逻辑**——专闸动作仍以各节为准；本条只强制**场场亮一行汇总牌**，把「有没有防冷门」变成可扫视、可 lint 的固定行。
+
+**`01` 场场必写（剧本段末、出票前）**：
+```text
+【冷门预防】触发=否
+【冷门预防】触发=是｜命中=深盘陷阱caution|状态碾压|跨市场背离|欧战深盘客|双新军锁主|假热|深让降维｜动作=已降不败|不定|不进TOP|观望
+```
+（`命中=` 可多选，用 `|`；`动作=` 须与本场实际方向/倾向一致，禁止空喊触发=是却仍锁热门满星进 TOP1。）
+
+**硬规则**：
+1. 日闸日起每场认真拆场必须出现 `【冷门预防】` 且含 `触发=是` 或 `触发=否`。  
+2. **触发=是** 时必须写 `命中=` + `动作=`；禁止只写「触发=是」。  
+3. 若本场已写专闸行（深盘陷阱 dirty/caution、状态碾压、欧战深盘客触发=是、排假热等）→ 冷门预防**必须** `触发=是` 且 `命中=` 点名对应闸。  
+4. 本条**不得**单独改写 `排除=` / 方向原子；改方向仍走专闸。  
+5. 禁止把本行当勾表：无信号却天天 `触发=是`、或有专闸信号却写 `触发=否` → lint ERROR。
+
+**日闸**：`lint_draft.py` `COLD_UPSET_DAY=2026-09-20`（`lint_cold_upset_banner`）。  
+来源：09-20 亲爱的「加」瘦身版统一入口；对比方案见会话（亮牌防漏 vs 专闸保精度）。
 
 多场日：文末加【今晚研究 TOP】（按研究星级排序，≤3；不涉及仓位）。  
 **全场汇总表（V17.4.34 · 必出）**：认真拆场写完后、TOP / 二串一之前，必须交一张 Markdown 表，列固定为：
