@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.37 日闸 lint 工具
+lint_draft.py — V17.4.38 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -15,6 +15,7 @@ lint_draft.py — V17.4.37 日闸 lint 工具
 10. lint_summary_table — 全场汇总表：编号/排除/推方向/单子倾向/推比分/推进球（4.34）
 11. lint_handicap_only_channel — 只开让球：未开售胜平负时映射禁写单买主胜等（4.36）
 12. lint_cold_upset_banner — 冷门预防统一亮牌：场场【冷门预防】触发=是|否（4.37）
+13. lint_hc_spf_single — 文末【让球稳健推荐】无|≤3（4.38；兼容旧块名）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -35,6 +36,7 @@ lint_draft.py — V17.4.37 日闸 lint 工具
     SUMMARY_TABLE_DAY = "2026-09-18"
     HC_ONLY_DAY = "2026-09-18"
     COLD_UPSET_DAY = "2026-09-20"
+    HC_SPF_SINGLE_DAY = "2026-09-20"
 """
 
 import sys
@@ -56,6 +58,7 @@ DUAL_DEBUT_DAY = "2026-09-18"  # 双新军锁主闸 soft#9
 SUMMARY_TABLE_DAY = "2026-09-18"  # 全场汇总表（排除/推方向/单子倾向/比分/进球）
 HC_ONLY_DAY = "2026-09-18"  # 只开让球分通道（胜平负未开售）
 COLD_UPSET_DAY = "2026-09-20"  # 冷门预防统一亮牌
+HC_SPF_SINGLE_DAY = "2026-09-20"  # 让球稳健可荐文末块
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -779,6 +782,60 @@ def lint_cold_upset_banner(sections: list[dict], day: str | None = None) -> list
     return warnings
 
 
+def lint_hc_spf_single(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
+    """
+    V17.4.38：认真拆≥1 场时，全文须有【让球稳健推荐】（或旧名【让球胜平负单选】）；
+    内容为「无」或含让球主胜/让平/让负/让球客胜。允许进 B 串，禁止冒充胜平负 A 串措辞混写。
+    """
+    if day and day < HC_SPF_SINGLE_DAY:
+        return []
+    if len(sections) < 1 or not filepath:
+        return []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except OSError:
+        return [{
+            'rule': 'lint_hc_spf_single',
+            'severity': 'ERROR',
+            'match': filepath,
+            'message': '无法读取文件做让球稳健推荐检查',
+        }]
+
+    warnings = []
+    m = re.search(
+        r'【(?:让球稳健推荐|让球胜平负单选)】([\s\S]*?)(?=\n【|\n## |\Z)',
+        content,
+    )
+    if not m:
+        warnings.append({
+            'rule': 'lint_hc_spf_single',
+            'severity': 'ERROR',
+            'match': filepath,
+            'message': '须有【让球稳健推荐】块（写「无」或≤3条；V17.4.38）',
+        })
+        return warnings
+    body = m.group(1).strip()
+    # 禁止在本块里写「主胜×客胜」这种胜平负串措辞冒充让球荐
+    if re.search(r'(?<!让球)(主胜|客胜|平局)\s*[×x]\s*(?<!让)(主胜|客胜)', body):
+        warnings.append({
+            'rule': 'lint_hc_spf_single',
+            'severity': 'ERROR',
+            'match': filepath,
+            'message': '【让球稳健推荐】禁止用胜平负×串冒充；让球串须写让球主胜等（V17.4.38）',
+        })
+    if re.search(r'^无\s*$', body, re.M) or body == '无':
+        return warnings
+    if not re.search(r'让球主胜|让平|让负|让球客胜', body):
+        warnings.append({
+            'rule': 'lint_hc_spf_single',
+            'severity': 'ERROR',
+            'match': filepath,
+            'message': '【让球稳健推荐】非「无」时须含 让球主胜/让平/让负/让球客胜（V17.4.38）',
+        })
+    return warnings
+
+
 def lint_summary_table(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
     """
     V17.4.34：认真拆 ≥1 场时，全文须有固定列表头的全场汇总表。
@@ -945,7 +1002,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -998,6 +1055,15 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_summary_table] ✓ 通过")
+
+        w_hc_single = lint_hc_spf_single(sections, day, filepath=filepath)
+        all_warnings.extend(w_hc_single)
+        if w_hc_single:
+            print(f"\n[lint_hc_spf_single] 发现 {len(w_hc_single)} 个问题:")
+            for item in w_hc_single:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_hc_spf_single] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)
