@@ -16,6 +16,7 @@ description: >-
     只开让球分通道 V17.4.36（胜平负未开售→出票只映射让球；二串一胜平负腿禁用）.
     冷门预防统一亮牌 V17.4.37（场场【冷门预防】触发=是|否；不改专闸动作）.
     让球稳健可荐 V17.4.38（让球盘稳则研究可荐让球主胜/让平/让负+盘口；可单场也可进让球串；非禁串关）.
+    复盘交付契约 V17.4.38（03模板硬序：病灶→四率→分账→让球稳健仓→票面→04对账；禁四率当唯一交卷）.
     全表防懒见 防偷懒.md（骨架≠模板×N；lint 0场=FAIL）.
     Mandatory 排除|剩余|二次 fixed lines; RMA exclude-bay vs lock-bay split.
   FORCE_SEARCH, match script, λ→λ′ / V15.6 / dual Edge ticket-only.
@@ -620,11 +621,14 @@ description: >-
 
 来源：`toutiao/drafts/2026-08-14`～`08-25` 复盘；`2026-08-26/27` ADHD；`03-复盘-2026-09-11.md` 提案 C；09-09 屠杀上限短板。
 
-### 复盘 → skill 闭环（同日）
+### 复盘 → skill 闭环（同日 · V17.4.38 交付契约）
 
-头条/研究日夹写 `03-复盘.md` 须：**先填 RMA 路由表** → 再答三问（方向 / 比分 / 剧本；**按仓只展开对应问**）。模板 `references/03-复盘模板.md`。  
+头条/研究日夹写 `03-复盘.md` 须按模板**硬序**：①病灶→改/不改（可写「本篇不改」）→ ②四率摘要卡 → ③方向分账 → ④让球稳健仓（有【让球稳健推荐】才填）→ ⑤三本账 → ⑥RMA 路由 → ⑦票面/二串一留样 → ⑧三问（**按仓只展开对应问**）→ ⑨`04`/canvas。模板 `references/03-复盘模板.md`。  
+**口头禁以命中率开场**；四率可甩，但不得当交卷唯一内容。让球稳健仓与四率分屏，禁止刷进推方向。  
+三本账分母：有 `02` 钉槽用钉槽，无则研究 TOP；全表分母 =【全场汇总表】行数（禁 silent 缩）。  
 对外空槽仅旧稿标 `skip`。新稿方向必给，进分母。比分 miss 先写 `score_miss_class`：合同外 **不改本 skill**。  
-**结构性病灶**才改本 skill（或软清单）；改后跑 `scripts/sync-skill-bundle.sh` + `python3 scripts/verify_accuracy_hooks.py`。终点是优化本执行器，不是交命中成绩单。
+**交卷清单**：模板文末勾选项；有 `scores/rma-*.json` 时可用 `scripts/gen_rma_detail_table.py` 生成 `04-详细对账表.md`。  
+**结构性病灶**才改本 skill（或软清单）；改后把改动 sync 到 `~/.agents/skills/football-predict-v17`（有 `scripts/sync-skill-bundle.sh` 则跑；否则 rsync 权威目录）并更新 `SYNC_STAMP.txt`。终点是优化本执行器，不是交命中成绩单。
 
 ### Edge 诚实声明（体彩）
 
