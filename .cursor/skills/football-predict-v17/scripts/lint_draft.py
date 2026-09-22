@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.50 日闸 lint 工具
+lint_draft.py — V17.4.52 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
 2. lint_02_atom_text — 检查 02 对外句面是否含「防平」硬焊措辞
-3. lint_02_must_direction — 验证每场方向原子必给（4.22.3）
+3. lint_02_must_direction — 验证每场方向原子必给（4.22.3；4.52 研究板可观望）
 4. lint_lean_pack — 验证倾向 ∈ 允许集（4.22.4）
 5. lint_exclude_three_step — 验证 排除|剩余|二次 固定行（4.27）
 6. lint_exclude_intel_gate — 排除三件套：排胜负边须硬情报或盘口质疑（4.31）
@@ -15,10 +15,12 @@ lint_draft.py — V17.4.50 日闸 lint 工具
 10. lint_summary_table — 全场汇总表：编号/排除/推方向/单子倾向/推比分/推进球（4.34）
 11. lint_handicap_only_channel — 只开让球：未开售胜平负时映射禁写单买主胜等（4.36）
 12. lint_cold_upset_banner — 冷门预防统一亮牌：场场【冷门预防】触发=是|否（4.37）
-13. lint_hc_spf_single — 文末【让球稳健推荐】无|≤3（4.38；兼容旧块名）
+13. lint_hc_spf_single — 文末【让球稳健推荐】无|≤3（4.38；研究板可免 4.52）
 14. lint_deep_lock_receipt — 深让+锁*须【深让可锁】+初盘/水位（4.40）
 15. lint_today_ticket — 文末【今日票面】空仓|方案+腿（4.41）
 16. lint_delivery_pack — 交卷模式/初盘类型/认真拆≤3/伤停未知禁PROCEED（4.50）
+17. lint_fake_heat_cold_exclude — 假热质疑禁止排冷侧无硬情报（4.52）
+18. lint_thin_intel_score — 薄情报/伤停未知研究板装满三格须弱置信（4.52）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -44,6 +46,8 @@ lint_draft.py — V17.4.50 日闸 lint 工具
     TICKET_DAY = "2026-09-22"
     LINEUP_GATE_DAY = "2026-09-22"
     DELIVERY_DAY = "2026-09-22"
+    FLOW_FIX_DAY = "2026-09-22"
+    JUDGE_FIX_DAY = "2026-09-22"
 """
 
 import sys
@@ -71,6 +75,7 @@ TICKET_DAY = "2026-09-22"  # 【今日票面】主交卷（4.41）
 LINEUP_GATE_DAY = "2026-09-22"  # 票面非空仓须【临场闸】（4.47）
 DELIVERY_DAY = "2026-09-22"  # 交卷模式/初盘类型/认真拆≤3/伤停未知（4.50）
 FLOW_FIX_DAY = "2026-09-22"  # 流程消矛盾：深让竞彩现盘/冷门仅认真拆（4.51）
+JUDGE_FIX_DAY = "2026-09-22"  # 弱方向/假热闸/薄情报比分（4.52）
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -219,36 +224,83 @@ def lint_02_atom_text(sections: list[dict], day: str | None = None) -> list[dict
     return warnings
 
 
-def lint_02_must_direction(sections: list[dict], day: str | None = None) -> list[dict]:
+def _delivery_mode(filepath: str | None) -> str | None:
+    """Return 研究板|下注单 from file head, or None."""
+    if not filepath:
+        return None
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            head = f.read().split('\n## ', 1)[0]
+    except OSError:
+        return None
+    m = re.search(r'交卷模式\s*=\s*(研究板|下注单)', head)
+    return m.group(1) if m else None
+
+
+def lint_02_must_direction(
+    sections: list[dict], day: str | None = None, filepath: str | None = None
+) -> list[dict]:
     """
     4.22.3 方向必须给。检查每场是否有方向原子。
+    V17.4.52：研究板允许 观望/不定罩；下注单仍须锁*/不败。
     """
     if day and day < DIR_MUST_DAY:
         return []
 
     warnings = []
     valid_atoms = ['锁主', '锁客', '锁平', '主不败', '客不败', '主胜', '客胜', '平局']
+    soft_atoms = ['观望', '不定罩']
+    mode = _delivery_mode(filepath)
+    allow_soft = (not day or day >= JUDGE_FIX_DAY) and mode == '研究板'
 
     for sec in sections:
         lines = sec['lines']
         header = sec['header']
+        blob = '\n'.join(lines)
 
         has_direction = False
+        has_soft = False
         for line in lines:
             if '方向｜倾向｜比分' in line or '方向｜' in line or '方向=' in line:
                 for atom in valid_atoms:
                     if atom in line:
                         has_direction = True
                         break
+                if not has_direction:
+                    for atom in soft_atoms:
+                        if atom in line:
+                            has_soft = True
+                            break
                 break
 
-        if not has_direction:
+        if has_direction:
+            continue
+        if has_soft and allow_soft:
+            continue
+        if has_soft and mode == '下注单':
             warnings.append({
                 'rule': 'lint_02_must_direction',
                 'severity': 'ERROR',
                 'match': header,
-                'message': "方向原子缺失（禁止空槽/胶着）"
+                'message': '下注单禁止方向=观望/不定罩（须锁*|不败；V17.4.52）',
             })
+            continue
+        if has_soft and not allow_soft:
+            if re.search(r'弱置信\s*=\s*是|情报档\s*=\s*(偏薄|不足)', blob):
+                continue
+            warnings.append({
+                'rule': 'lint_02_must_direction',
+                'severity': 'ERROR',
+                'match': header,
+                'message': '方向=观望须交卷模式=研究板，或同场弱置信/情报档偏薄 (V17.4.52)',
+            })
+            continue
+        warnings.append({
+            'rule': 'lint_02_must_direction',
+            'severity': 'ERROR',
+            'match': header,
+            'message': "方向原子缺失（禁止空槽/胶着）"
+        })
     return warnings
 
 
@@ -270,6 +322,8 @@ def lint_lean_pack(sections: list[dict], day: str | None = None) -> list[dict]:
         '主胜':  {'主胜', '不定'},
         '客胜':  {'客胜', '不定'},
         '平局':  {'平', '不定'},
+        '观望': {'不定'},
+        '不定罩': {'不定'},
     }
 
     valid_lean_tokens = {'主胜', '客胜', '平', '不定'}
@@ -293,6 +347,10 @@ def lint_lean_pack(sections: list[dict], day: str | None = None) -> list[dict]:
                     direction = '锁客'
                 elif '锁平' in line:
                     direction = '锁平'
+                elif '观望' in line:
+                    direction = '观望'
+                elif '不定罩' in line:
+                    direction = '不定罩'
                 elif '主胜' in line and '倾向' not in line and '单子倾向' not in line:
                     direction = '主胜'
                 elif '客胜' in line and '倾向' not in line and '单子倾向' not in line:
@@ -373,13 +431,14 @@ def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> lis
     """
     V17.4.27：01 每场须有 排除=｜剩余=｜二次=（二次须含 倾斜…→ 或 分不清→ 分叉）。
     V17.4.47：排除=暂缓 合法（剩余期望三向）；剩{主胜,客胜} 禁止二次写主不败/客不败。
+    V17.4.52：二次可 →观望|不定罩（研究板弱方向）。
     """
     if day and day < EXCLUDE_DAY:
         return []
 
     warnings = []
     valid_exclude = {'主胜', '平', '客胜'}
-    valid_secondary = {'锁主', '锁平', '锁客', '主不败', '客不败'}
+    valid_secondary = {'锁主', '锁平', '锁客', '主不败', '客不败', '观望', '不定罩'}
 
     for sec in sections:
         header = sec['header']
@@ -390,13 +449,15 @@ def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> lis
 
         m_ex = re.search(r'排除\s*=\s*(主胜|平|客胜|暂缓)', blob)
         m_rem = re.search(r'剩余\s*=\s*\{([^}]+)\}', blob)
-        # 二次=… → 锁主|…  （允许中间夹 倾斜/分不清/深让降维）
+        # 二次=… → 锁主|…  （允许中间夹 倾斜/分不清/深让降维；4.52 观望）
         m_sec = re.search(
-            r'二次\s*=\s*([^\n]*?)(→|->)\s*(锁主|锁平|锁客|主不败|客不败)',
+            r'二次\s*=\s*([^\n]*?)(→|->)\s*(锁主|锁平|锁客|主不败|客不败|观望|不定罩)',
             blob,
         )
         # 兼容旧稿：二次=锁主（无箭头）
-        m_sec_legacy = re.search(r'二次\s*=\s*(锁主|锁平|锁客|主不败|客不败)\b', blob)
+        m_sec_legacy = re.search(
+            r'二次\s*=\s*(锁主|锁平|锁客|主不败|客不败|观望|不定罩)\b', blob
+        )
 
         if not m_ex:
             warnings.append({
@@ -536,7 +597,7 @@ def lint_exclude_intel_gate(sections: list[dict], day: str | None = None) -> lis
                     'rule': 'lint_exclude_intel_gate',
                     'severity': 'ERROR',
                     'match': header,
-                    'message': '排除=暂缓 仍须写非空理由（ICS低|揭幕|槽不足；V17.4.47）',
+                    'message': '排除=暂缓 仍须写非空理由（情报档偏薄|不足|揭幕|槽不足；V17.4.52）',
                 })
             continue
 
@@ -583,6 +644,103 @@ def lint_exclude_intel_gate(sections: list[dict], day: str | None = None) -> lis
                 ),
             })
 
+    return warnings
+
+
+def lint_fake_heat_cold_exclude(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.52：质疑含假热时，禁止仅凭假热排除冷侧（须另有硬情报词）。
+    主热假热 → 冷侧=客胜；客热假热 → 冷侧=主胜；仅「假热」→ 排胜负边都须硬词。
+    """
+    if day and day < JUDGE_FIX_DAY:
+        return []
+
+    warnings = []
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        m = re.search(
+            r'排除\s*=\s*(主胜|平|客胜|暂缓)\s*｜\s*理由\s*=\s*([^｜\n]+)(?:\s*｜\s*质疑\s*=\s*([^｜\n]+))?',
+            blob,
+        )
+        if not m:
+            continue
+        exclude = m.group(1)
+        reason = m.group(2).strip()
+        challenge = (m.group(3).strip() if m.lastindex >= 3 and m.group(3) else '')
+        if exclude not in ('主胜', '客胜'):
+            continue
+        if '假热' not in challenge:
+            continue
+        has_hard = bool(EXCLUDE_HARD_RE.search(reason))
+        # 热侧：主热/主假热 → 热=主；客热/客假热 → 热=客
+        home_hot = bool(re.search(r'主(?:队)?(?:热|假热)|主胜假热|主热假热', challenge))
+        away_hot = bool(re.search(r'客(?:队)?(?:热|假热)|客胜假热|客热假热', challenge))
+        if home_hot and not away_hot:
+            cold = '客胜'
+        elif away_hot and not home_hot:
+            cold = '主胜'
+        else:
+            # 未标主/客热：假热不得单独排任一侧
+            cold = exclude
+        if exclude == cold and not has_hard:
+            warnings.append({
+                'rule': 'lint_fake_heat_cold_exclude',
+                'severity': 'ERROR',
+                'match': header,
+                'message': (
+                    f'质疑含假热却排除={exclude}（冷侧/未标热侧）且理由无硬情报；'
+                    f'假热只削弱热侧锁*，不得单独排冷侧 (V17.4.52)'
+                ),
+            })
+    return warnings
+
+
+def lint_thin_intel_score(
+    sections: list[dict], day: str | None = None, filepath: str | None = None
+) -> list[dict]:
+    """
+    V17.4.52：研究板 +（伤停未知|情报档偏薄/不足）时，
+    若装箱三格（主/次/防或 x-y / a-b / c-d）须写弱置信=是；否则应比分弃权。
+    """
+    if day and day < JUDGE_FIX_DAY:
+        return []
+    mode = _delivery_mode(filepath)
+    if mode == '下注单':
+        return []  # 下注单另有默认弃权纪律；本闸盯研究板假满格
+
+    warnings = []
+    injury_unknown = re.compile(
+        r'伤停[^\n]{0,40}(未知|未见|无可靠源|槽弱)|伤停\s*[=：:]\s*(未知|未见|无可靠源|槽弱)'
+    )
+    thin = re.compile(r'情报档\s*=\s*(偏薄|不足)')
+    weak = re.compile(r'弱置信\s*=\s*是')
+    abandon = re.compile(r'比分弃权')
+    packed = re.compile(
+        r'主\s*/\s*次\s*/\s*防\s*=\s*\d|主/次/防\s*=\s*\d|'
+        r'\d\s*[-:]\s*\d\s*/\s*\d\s*[-:]\s*\d\s*/\s*\d\s*[-:]\s*\d'
+    )
+
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        if not (injury_unknown.search(blob) or thin.search(blob)):
+            continue
+        if abandon.search(blob):
+            continue
+        if not packed.search(blob):
+            continue
+        if weak.search(blob):
+            continue
+        warnings.append({
+            'rule': 'lint_thin_intel_score',
+            'severity': 'ERROR',
+            'match': header,
+            'message': (
+                '伤停未知/情报档偏薄时研究板默认比分弃权；'
+                '若装箱三格须写 弱置信=是 (V17.4.52)'
+            ),
+        })
     return warnings
 
 
@@ -1083,10 +1241,13 @@ def lint_hc_spf_single(sections: list[dict], day: str | None = None, filepath: s
     """
     V17.4.38：认真拆≥1 场时，全文须有【让球稳健推荐】（或旧名【让球胜平负单选】）；
     内容为「无」或含让球主胜/让平/让负/让球客胜。允许进 B 串，禁止冒充胜平负 A 串措辞混写。
+    V17.4.52：交卷模式=研究板 时本块可免。
     """
     if day and day < HC_SPF_SINGLE_DAY:
         return []
     if len(sections) < 1 or not filepath:
+        return []
+    if (not day or day >= JUDGE_FIX_DAY) and _delivery_mode(filepath) == '研究板':
         return []
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
@@ -1412,7 +1573,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -1429,10 +1590,10 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         rules = [
             ("lint_low_structure_weld", lint_low_structure_weld),
             ("lint_02_atom_text", lint_02_atom_text),
-            ("lint_02_must_direction", lint_02_must_direction),
             ("lint_lean_pack", lint_lean_pack),
             ("lint_exclude_three_step", lint_exclude_three_step),
             ("lint_exclude_intel_gate", lint_exclude_intel_gate),
+            ("lint_fake_heat_cold_exclude", lint_fake_heat_cold_exclude),
             ("lint_seasoning_pack", lint_seasoning_pack),
             ("lint_deep_lock_receipt", lint_deep_lock_receipt),
             ("lint_euro_deep_away", lint_euro_deep_away),
@@ -1456,6 +1617,25 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                     print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
             else:
                 print(f"\n[{name}] ✓ 通过")
+
+        # 方向原子须读交卷模式
+        w_dir = lint_02_must_direction(sections, day, filepath=filepath)
+        all_warnings.extend(w_dir)
+        if w_dir:
+            print(f"\n[lint_02_must_direction] 发现 {len(w_dir)} 个问题:")
+            for item in w_dir:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_02_must_direction] ✓ 通过")
+
+        w_thin = lint_thin_intel_score(sections, day, filepath=filepath)
+        all_warnings.extend(w_thin)
+        if w_thin:
+            print(f"\n[lint_thin_intel_score] 发现 {len(w_thin)} 个问题:")
+            for item in w_thin:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_thin_intel_score] ✓ 通过")
 
         # 汇总表需读全文（表在场次段外）
         w_sum = lint_summary_table(sections, day, filepath=filepath)
@@ -1858,8 +2038,60 @@ def _self_check() -> None:
         'lines': ['排除=客胜｜理由=火力｜质疑=无', '方向=主不败'],
     }]
     assert lint_cold_upset_banner(skel, day='2026-09-22') == []
-    # V17.4.50 交卷二分
+    # V17.4.52 假热闸 / 弱方向 / 薄比分
     import tempfile
+    fake_bad = [{
+        'header': '周二010 韩 vs 沙',
+        'lines': [
+            '排除=客胜｜理由=主场气势｜质疑=主热假热',
+            '方向=主不败',
+        ],
+    }]
+    assert any('假热' in x['message'] for x in lint_fake_heat_cold_exclude(fake_bad, day='2026-09-22'))
+    fake_ok = [{
+        'header': '周二010 韩 vs 沙',
+        'lines': [
+            '排除=客胜｜理由=客队连败火力｜质疑=主热假热',
+            '方向=主不败',
+        ],
+    }]
+    assert lint_fake_heat_cold_exclude(fake_ok, day='2026-09-22') == []
+    with tempfile.NamedTemporaryFile('w', suffix='.md', delete=False, encoding='utf-8') as tf:
+        tf.write('# 测\n交卷模式=研究板\n\n## 周二011 A vs B\n方向=观望\n进球=1-2\n')
+        soft_path = tf.name
+    try:
+        soft_secs = [{'header': '周二011 A vs B', 'lines': ['方向=观望', '进球=1-2']}]
+        assert lint_02_must_direction(soft_secs, day='2026-09-22', filepath=soft_path) == []
+        with open(soft_path, 'w', encoding='utf-8') as f:
+            f.write('# 测\n交卷模式=下注单\n\n## 周二011 A vs B\n方向=观望\n')
+        assert any(
+            '下注单' in x['message']
+            for x in lint_02_must_direction(soft_secs, day='2026-09-22', filepath=soft_path)
+        )
+    finally:
+        os.unlink(soft_path)
+    thin_bad = [{
+        'header': '周二012 薄 vs 客',
+        'lines': [
+            '伤停=未见',
+            '情报档=偏薄｜CAUTION',
+            '方向=主不败',
+            '主/次/防=1-0/1-1/0-0',
+        ],
+    }]
+    assert any('弱置信' in x['message'] for x in lint_thin_intel_score(thin_bad, day='2026-09-22'))
+    thin_ok = [{
+        'header': '周二012 薄 vs 客',
+        'lines': [
+            '伤停=未见',
+            '情报档=偏薄｜CAUTION',
+            '方向=主不败｜弱置信=是',
+            '比分弃权',
+            '进球=1-2',
+        ],
+    }]
+    assert lint_thin_intel_score(thin_ok, day='2026-09-22') == []
+    # V17.4.50 交卷二分
     with tempfile.NamedTemporaryFile('w', suffix='.md', delete=False, encoding='utf-8') as tf:
         tf.write(
             '# 测\n交卷模式=研究板\n\n'
@@ -1891,11 +2123,11 @@ def _self_check() -> None:
         assert any('交卷模式' in x['message'] for x in w_mode)
     finally:
         os.unlink(bad_path)
-    print('self-check parse headers + deep_lock + delivery + cold_skel: ok')
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.51 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.52 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')

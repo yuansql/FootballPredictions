@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-09-22 18:03:14
+version_note: V17.4.52 弱方向+假热闸+薄情报比分（研究板可观望/弱置信；假热≠排冷侧；伤停未知默认弃权比分；研究板文末缩；情报档词表统一；研究日复盘口径）
+
+# football-predict-v17 sync stamp
 synced_at: 2026-09-22 16:55:11
 version_note: V17.4.51 流程消矛盾（汇总表比分跟交卷模式；票面主交卷按模式；深让A兼容竞彩现盘；方向冻结；ICS改档；骨架再砍；H2H正式/友谊；V15.6仅认真拆可介入）
 
