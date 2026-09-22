@@ -56,13 +56,17 @@ FootballPredictions/
 ├── rules/                   ← V15.6 补丁
 ├── scripts/
 │   ├── sync-skill-bundle.sh
-│   └── lint_draft.py
+│   ├── lint_draft.py
+│   ├── structure_gate.py
+│   ├── deep_away_trap.py
+│   └── gen_rma_detail_table.py
 └── skills/football-predict-v17/
     ├── SKILL.md
     ├── output-template.md
     └── references/          ← sync 生成的精简副本
 ```
 
+已删：`archive/`、回测文档/空 drafts、离线回测脚本、ICS/红旗独立 CLI（规则留在 SKILL，稿内自评 + lint 兜底）。
 ---
 
 ## 维护者

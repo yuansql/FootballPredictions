@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.40 日闸 lint 工具
+lint_draft.py — V17.4.41 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -17,6 +17,7 @@ lint_draft.py — V17.4.40 日闸 lint 工具
 12. lint_cold_upset_banner — 冷门预防统一亮牌：场场【冷门预防】触发=是|否（4.37）
 13. lint_hc_spf_single — 文末【让球稳健推荐】无|≤3（4.38；兼容旧块名）
 14. lint_deep_lock_receipt — 深让+锁*须【深让可锁】+初盘/水位（4.40）
+15. lint_today_ticket — 文末【今日票面】空仓|方案+腿（4.41）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -39,6 +40,7 @@ lint_draft.py — V17.4.40 日闸 lint 工具
     COLD_UPSET_DAY = "2026-09-20"
     HC_SPF_SINGLE_DAY = "2026-09-20"
     DEEP_LOCK_DAY = "2026-09-22"
+    TICKET_DAY = "2026-09-22"
 """
 
 import sys
@@ -62,6 +64,7 @@ HC_ONLY_DAY = "2026-09-18"  # 只开让球分通道（胜平负未开售）
 COLD_UPSET_DAY = "2026-09-20"  # 冷门预防统一亮牌
 HC_SPF_SINGLE_DAY = "2026-09-20"  # 让球稳健可荐文末块
 DEEP_LOCK_DAY = "2026-09-22"  # 深让+锁*须【深让可锁】收据
+TICKET_DAY = "2026-09-22"  # 【今日票面】主交卷（4.41）
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -912,6 +915,75 @@ def lint_hc_spf_single(sections: list[dict], day: str | None = None, filepath: s
     return warnings
 
 
+def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
+    """
+    V17.4.41：认真拆≥1 场时，全文须有【今日票面】；
+    允许方案=空仓（须见空仓或弃因）；非空仓须含预算=与可买映射（单买/让球/二串等）。
+    """
+    if day and day < TICKET_DAY:
+        return []
+    if len(sections) < 1 or not filepath:
+        return []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except OSError:
+        return [{
+            'rule': 'lint_today_ticket',
+            'severity': 'ERROR',
+            'match': filepath,
+            'message': '无法读取文件做今日票面检查',
+        }]
+
+    warnings = []
+    m = re.search(r'【今日票面】([\s\S]*?)(?=\n【|\n## |\Z)', content)
+    if not m:
+        warnings.append({
+            'rule': 'lint_today_ticket',
+            'severity': 'ERROR',
+            'match': filepath,
+            'message': '须有【今日票面】块（方案=空仓或可买腿；V17.4.41 主交卷）',
+        })
+        return warnings
+    body = m.group(1)
+    if not re.search(r'预算\s*=', body):
+        warnings.append({
+            'rule': 'lint_today_ticket',
+            'severity': 'ERROR',
+            'match': filepath,
+            'message': '【今日票面】须含 预算=（如 12元；V17.4.41）',
+        })
+    empty = bool(re.search(r'方案\s*=\s*空仓|空仓', body))
+    if empty:
+        return warnings
+    if not re.search(r'方案\s*=', body):
+        warnings.append({
+            'rule': 'lint_today_ticket',
+            'severity': 'ERROR',
+            'match': filepath,
+            'message': '【今日票面】非空仓时须含 方案=（V17.4.41）',
+        })
+    # 可买映射：单买 / 让球 / 二串 / 腿=
+    if not re.search(r'单买|让球主胜|让平|让负|让球客胜|二串|腿\s*=', body):
+        warnings.append({
+            'rule': 'lint_today_ticket',
+            'severity': 'ERROR',
+            'match': filepath,
+            'message': '【今日票面】非空仓时须含可买腿（单买/让球/二串/腿=；禁只用主不败；V17.4.41）',
+        })
+    # 禁止把不败当唯一腿且无单买/让球字样
+    if re.search(r'腿\s*=[^\n]*(主不败|客不败)', body) and not re.search(
+        r'单买|让球主胜|让平|让负|让球客胜', body
+    ):
+        warnings.append({
+            'rule': 'lint_today_ticket',
+            'severity': 'ERROR',
+            'match': filepath,
+            'message': '【今日票面】禁止用不败当结算腿（V17.4.41）',
+        })
+    return warnings
+
+
 def lint_summary_table(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
     """
     V17.4.34：认真拆 ≥1 场时，全文须有固定列表头的全场汇总表。
@@ -1078,7 +1150,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -1141,6 +1213,15 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_hc_spf_single] ✓ 通过")
+
+        w_ticket = lint_today_ticket(sections, day, filepath=filepath)
+        all_warnings.extend(w_ticket)
+        if w_ticket:
+            print(f"\n[lint_today_ticket] 发现 {len(w_ticket)} 个问题:")
+            for item in w_ticket:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_today_ticket] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)

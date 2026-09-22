@@ -77,11 +77,16 @@ sync_local_skill() {
   [[ -f "$PKG/防偷懒.md" ]] && cp "$PKG/防偷懒.md" "$dest/"
   [[ -f "$PKG/SYNC_STAMP.txt" ]] && cp "$PKG/SYNC_STAMP.txt" "$dest/"
   cp -R "$REF/." "$dest/references/"
-  for s in lint_draft.py structure_gate.py deep_away_trap.py red_flag_scanner.py \
-           score_geometry.py intelligence_checklist.py clause_heatmap.py \
-           backtest_structure_gate.py; do
+  for s in lint_draft.py structure_gate.py deep_away_trap.py gen_rma_detail_table.py; do
     [[ -f "$ROOT/scripts/$s" ]] && cp "$ROOT/scripts/$s" "$dest/scripts/"
   done
+  # 清理下游已废除的脚本，避免幽灵文件
+  rm -f "$dest/scripts/backtest_structure_gate.py" \
+        "$dest/scripts/clause_heatmap.py" \
+        "$dest/scripts/score_geometry.py" \
+        "$dest/scripts/intelligence_checklist.py" \
+        "$dest/scripts/red_flag_scanner.py" \
+        "$dest/references/trap_confirmation_template.md"
 }
 
 if [[ "$LOCAL" -eq 1 ]]; then

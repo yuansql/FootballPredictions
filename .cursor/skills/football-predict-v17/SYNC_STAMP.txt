@@ -1,3 +1,7 @@
+# football-predict-v17 sync stamp
+synced_at: 2026-09-22 11:48:30 
+version_note: V17.4.41 + dead-weight cleanup (archive/backtest scripts/ghost refs removed; scripts keep lint+structure_gate+deep_away_trap+gen_rma)
+
 synced 2026-09-14 toutiao RMA session
 V17.4.27: 排除|剩余|二次固定行 + RMA 排除仓≠锁*仓分账
 V17.4.26: 深让锁主降维 + 中游主场主不败出票收据 + 深盘碾压防/旁挂屠杀格
@@ -17,41 +21,4 @@ V17.4.31: 排除三件套（情报硬标准/盘口质疑/SP仅参考；禁软排
 source: 09-17 亲爱的定层级 + 005拉科软排课 + 利雅假热课；勇气版不扩弃权
 synced 2026-09-17
 V17.4.32: 佐料整包（初盘为锚；水位看路径；SP+让球+Edge+双闸门+降维同屏；禁只看即时SP）
-source: 09-17 亲爱的「佐料一起看」+「初盘定死/SP水位浮动」
-synced 2026-09-17
-防偷懒.md + lint 认周一～周日/VS；0 场解析 ERROR+exit 1
-source: 09-17 亲爱的 A（全表防懒写进 skill）
-synced 2026-09-18
-V17.4.33: 欧战深盘客闸 soft#8 + 双新军锁主闸 soft#9（改方向原子；分析时必见）
-source: 09-17 周四 RMA 003克里特/009利勒 + 亲爱的「要记进skill才能分析时知道」
-synced 2026-09-18
-V17.4.34: 全场汇总表必出（编号|对阵|排除|推方向|单子倾向|推比分|推进球）
-source: 09-18 亲爱的「分析后表格总结要这些列 + 要对单子倾向」
-synced 2026-09-18
-V17.4.35: 汇总表权威链（4.22.4 锁*表内倾向必填；复盘单子倾向仓同屏；二串一/稳单腿取表）
-source: 09-18 亲爱的选整包 A
-synced 2026-09-18
-V17.4.36: 只开让球分通道（胜平负未开售→出票只映射让球；二串一 A/B 分区；lint_handicap_only_channel）
-source: 09-18 亲爱的「有些比赛只开了让球没有开胜平负，注意看」+ 周五008拜仁
-synced 2026-09-20
-V17.4.37: 冷门预防统一亮牌（场场【冷门预防】触发=是|否；专闸已亮禁写否；lint_cold_upset_banner）
-source: 09-20 亲爱的「加」瘦身版统一入口
-synced 2026-09-20
-V17.4.38: 让球稳健可荐（【让球稳健推荐】无|≤3；稳则荐让球+盘口；可单场或B串；纠正「单买禁串关」误读；lint_hc_spf_single）
-source: 09-20 亲爱的纠正「不是单买不串关；让球有稳的可以推荐」
-
-synced 2026-09-21
-V17.4.38: 复盘交付契约（03模板硬序+让球稳健仓+票面+04 gen；SKILL闭环；防偷懒分母；gen_rma_detail_table.py）
-source: 亲爱的「开始」P0+P1
-
-synced 2026-09-22
-V17.4.39: 深让可锁单选（推翻4.26机械降不败；情报够+初盘/水位/现盘同向可锁*；不败仅贴脸/分不清）
-source: 09-22 亲爱的纠正 + 09-21 中国女课
-
-V17.4.39 patch: 没情报须先审初盘+水位；盘口能锁仍走A；禁「无情报=自动B」
-source: 09-22 亲爱的补刀
-
-
-synced 2026-09-22
-V17.4.40: 深让可锁落地闸（清让球稳健4.26残句；lint_deep_lock_receipt；ICS<50≠自动B）
-source: 亲爱的「听你的」三刀
+source: 09-1
