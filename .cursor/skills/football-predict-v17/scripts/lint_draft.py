@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.38 日闸 lint 工具
+lint_draft.py — V17.4.40 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -16,6 +16,7 @@ lint_draft.py — V17.4.38 日闸 lint 工具
 11. lint_handicap_only_channel — 只开让球：未开售胜平负时映射禁写单买主胜等（4.36）
 12. lint_cold_upset_banner — 冷门预防统一亮牌：场场【冷门预防】触发=是|否（4.37）
 13. lint_hc_spf_single — 文末【让球稳健推荐】无|≤3（4.38；兼容旧块名）
+14. lint_deep_lock_receipt — 深让+锁*须【深让可锁】+初盘/水位（4.40）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -37,6 +38,7 @@ lint_draft.py — V17.4.38 日闸 lint 工具
     HC_ONLY_DAY = "2026-09-18"
     COLD_UPSET_DAY = "2026-09-20"
     HC_SPF_SINGLE_DAY = "2026-09-20"
+    DEEP_LOCK_DAY = "2026-09-22"
 """
 
 import sys
@@ -59,6 +61,7 @@ SUMMARY_TABLE_DAY = "2026-09-18"  # 全场汇总表（排除/推方向/单子倾
 HC_ONLY_DAY = "2026-09-18"  # 只开让球分通道（胜平负未开售）
 COLD_UPSET_DAY = "2026-09-20"  # 冷门预防统一亮牌
 HC_SPF_SINGLE_DAY = "2026-09-20"  # 让球稳健可荐文末块
+DEEP_LOCK_DAY = "2026-09-22"  # 深让+锁*须【深让可锁】收据
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -590,6 +593,79 @@ def lint_seasoning_pack(sections: list[dict], day: str | None = None) -> list[di
     return warnings
 
 
+def lint_deep_lock_receipt(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.40：触深让/深热警示且方向=锁* 时，须【深让可锁】且含初盘= + 水位=/水位路径=。
+    走不败/降维不拦。检测：明确深让词，或让球≤-1.5/≥+1.5，或热侧 SP≤1.35。
+    """
+    if day and day < DEEP_LOCK_DAY:
+        return []
+
+    lock_re = re.compile(r'方向\s*=\s*锁(主|客)|二次\s*=[^\n]*→\s*锁(主|客)')
+    deep_word_re = re.compile(r'深让|深热|触深让|【深让')
+    deep_ah_re = re.compile(
+        r'(?:让球|亚盘|盘口|主让|客让)\s*[=:：]?\s*'
+        r'(?:主[让\-]?)?-?(?:1\.5|2(?:\.0)?|2\.5|3)|'
+        r'(?:客[让\+]?)?\+?(?:1\.5|2(?:\.0)?|2\.5|3)'
+    )
+    banner_re = re.compile(r'【深让可锁】[^\n]*')
+    has_open = re.compile(r'初盘\s*=')
+    has_water = re.compile(r'水位路径\s*=|水位\s*=')
+    sp_home_re = re.compile(r'(?:主胜\s*SP|SP[_ ]?H|主\s*SP)\s*[=:：]?\s*(\d+\.?\d*)', re.I)
+    sp_away_re = re.compile(r'(?:客胜\s*SP|SP[_ ]?A|客\s*SP)\s*[=:：]?\s*(\d+\.?\d*)', re.I)
+
+    warnings = []
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        lm = lock_re.search(blob)
+        if not lm:
+            continue
+        lock_side = lm.group(1) or lm.group(2)  # 主|客
+        deep = bool(deep_word_re.search(blob) or deep_ah_re.search(blob))
+        if not deep:
+            # 热侧 SP≤1.35 也算深热警示
+            if lock_side == '主':
+                sm = sp_home_re.search(blob)
+                if sm and float(sm.group(1)) <= 1.35:
+                    deep = True
+            else:
+                sm = sp_away_re.search(blob)
+                if sm and float(sm.group(1)) <= 1.35:
+                    deep = True
+        if not deep:
+            continue
+        bm = banner_re.search(blob)
+        if not bm:
+            warnings.append({
+                'rule': 'lint_deep_lock_receipt',
+                'severity': 'ERROR',
+                'match': header,
+                'message': (
+                    '深让/深热警示下锁* 须写【深让可锁】触发=是｜初盘=…｜水位=… '
+                    '(V17.4.40；禁空喊锁*)'
+                ),
+            })
+            continue
+        line = bm.group(0)
+        missing = []
+        if not has_open.search(line) and not has_open.search(blob):
+            missing.append('初盘=')
+        if not has_water.search(line) and not has_water.search(blob):
+            missing.append('水位=')
+        if missing:
+            warnings.append({
+                'rule': 'lint_deep_lock_receipt',
+                'severity': 'ERROR',
+                'match': header,
+                'message': (
+                    f'【深让可锁】缺 {",".join(missing)}；'
+                    f'A 分支须同屏初盘锚+水位路径 (V17.4.40)'
+                ),
+            })
+    return warnings
+
+
 def lint_euro_deep_away(sections: list[dict], day: str | None = None) -> list[dict]:
     """
     V17.4.33 soft#8：欧冠/欧联/欧协场若方向=锁客，须写【欧战深盘客闸】行。
@@ -1002,7 +1078,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -1024,6 +1100,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
             ("lint_exclude_three_step", lint_exclude_three_step),
             ("lint_exclude_intel_gate", lint_exclude_intel_gate),
             ("lint_seasoning_pack", lint_seasoning_pack),
+            ("lint_deep_lock_receipt", lint_deep_lock_receipt),
             ("lint_euro_deep_away", lint_euro_deep_away),
             ("lint_dual_debut_lock", lint_dual_debut_lock),
             ("lint_handicap_only_channel", lint_handicap_only_channel),
@@ -1376,11 +1453,41 @@ def _self_check() -> None:
     assert is_match_header('周一003 主 vs 客')
     assert not is_match_header('精选场次')
     assert not is_match_header('今晚研究 TOP')
-    print('self-check parse headers: ok')
+    # V17.4.40 深让可锁收据
+    bad = [{
+        'header': '周日001 中国女 vs 对手',
+        'lines': [
+            '深让警示触线',
+            '方向=锁主',
+            '二次=倾斜主胜 → 锁主｜单子腿=主胜',
+        ],
+    }]
+    w_bad = lint_deep_lock_receipt(bad, day='2026-09-22')
+    assert len(w_bad) == 1 and w_bad[0]['rule'] == 'lint_deep_lock_receipt'
+    good = [{
+        'header': '周日001 中国女 vs 对手',
+        'lines': [
+            '深让警示触线',
+            '方向=锁主',
+            '【深让可锁】触发=是｜初盘=主-2｜水位=稳｜现盘=主-2｜依据=盘口｜档差够',
+            '二次=倾斜主胜 → 锁主｜单子腿=主胜',
+        ],
+    }]
+    assert lint_deep_lock_receipt(good, day='2026-09-22') == []
+    soft = [{
+        'header': '周日002 贴脸场 vs 客',
+        'lines': [
+            '深让警示触线',
+            '方向=主不败',
+            '【深让降维】触发=是｜理由=水位撤热',
+        ],
+    }]
+    assert lint_deep_lock_receipt(soft, day='2026-09-22') == []
+    print('self-check parse headers + deep_lock: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.34 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.40 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
