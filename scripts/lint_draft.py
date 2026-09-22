@@ -956,24 +956,30 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
     empty = bool(re.search(r'方案\s*=\s*空仓|空仓', body))
     if empty:
         return warnings
-    if not re.search(r'方案\s*=', body):
+    # 非空仓：方案= 或 形态=一张/两张 或 稳=
+    if not re.search(r'方案\s*=', body) and not re.search(
+        r'形态\s*=|稳\s*=', body
+    ):
         warnings.append({
             'rule': 'lint_today_ticket',
             'severity': 'ERROR',
             'match': filepath,
-            'message': '【今日票面】非空仓时须含 方案=（V17.4.41）',
+            'message': '【今日票面】非空仓时须含 方案= 或 形态=/稳=（V17.4.41/4.43）',
         })
-    # 可买映射：单买 / 让球 / 二串 / 腿=
-    if not re.search(r'单买|让球主胜|让平|让负|让球客胜|二串|腿\s*=', body):
+    # 可买映射：单买 / 让球 / 二串 / 腿= / 稳= / 博= / 半全场 / 比分
+    if not re.search(
+        r'单买|让球主胜|让平|让负|让球客胜|二串|腿\s*=|稳\s*=|博\s*=|半全场|比分',
+        body,
+    ):
         warnings.append({
             'rule': 'lint_today_ticket',
             'severity': 'ERROR',
             'match': filepath,
-            'message': '【今日票面】非空仓时须含可买腿（单买/让球/二串/腿=；禁只用主不败；V17.4.41）',
+            'message': '【今日票面】非空仓时须含可买腿（单买/让球/二串/腿=/稳=/博=/比分/半全场；V17.4.43）',
         })
     # 禁止把不败当唯一腿且无单买/让球字样
     if re.search(r'腿\s*=[^\n]*(主不败|客不败)', body) and not re.search(
-        r'单买|让球主胜|让平|让负|让球客胜', body
+        r'单买|让球主胜|让平|让负|让球客胜|稳\s*=', body
     ):
         warnings.append({
             'rule': 'lint_today_ticket',

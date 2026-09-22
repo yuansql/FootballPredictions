@@ -1,6 +1,18 @@
 # football-predict-v17 sync stamp
-synced_at: 2026-09-22 11:48:30 
-version_note: V17.4.41 + dead-weight cleanup (archive/backtest scripts/ghost refs removed; scripts keep lint+structure_gate+deep_away_trap+gen_rma)
+synced_at: 2026-09-22 14:28:18
+version_note: V17.4.44 捷报四页签（现场分析/数据分析/胜平负/三合一）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-22 14:27:42
+version_note: V17.4.44 自研纪律（禁荐单/AI/专家连红；捷报只采数据槽）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-22 14:04:07
+version_note: V17.4.43 票面双轨（8|12；一张二串一或稳+博；半全场；比分/半全场可单场）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-22 12:43:38
+version_note: V17.4.42 跨玩法二串一（胜平负×进球×比分×让球；最少二串一默认；预算听亲爱的；盲排/盲向/盲侧）
 
 synced 2026-09-14 toutiao RMA session
 V17.4.27: 排除|剩余|二次固定行 + RMA 排除仓≠锁*仓分账
@@ -11,14 +23,4 @@ V17.4.27: 二次须写 倾斜→锁* / 分不清→不败｜单子腿（禁只�
 V17.4.28: 状态评分硬闸（名气≠状态·近5场评分）+ BOTH_SCORE 比分补偿（双方进球防格强置）
 source: 09-15 RMA（阿布艾因 0-1 利雅胜利 / 阿拉维斯 2-3 巴伦西亚）+ 09-16 用户反馈「近3→近5场」
 synced 2026-09-16
-V17.4.29: 深盘陷阱阈值放宽（亚盘≥0.75/跨市场背离）+ 盘口异动可进反剧本收据 + 亚冠/沙特豪门名单
-source: 09-15/16 RMA 方向 miss（006利雅胜利/007巴列卡诺/008阿拉维斯）盘口复盘
-synced 2026-09-16
-V17.4.30: 状态碾压冷门预警 + 跨市场背离预警
-source: 09-16 冷门预警扩展方案 B（006/008 盘口复盘）
-synced 2026-09-16
-V17.4.31: 排除三件套（情报硬标准/盘口质疑/SP仅参考；禁软排胜负边；允排假热）
-source: 09-17 亲爱的定层级 + 005拉科软排课 + 利雅假热课；勇气版不扩弃权
-synced 2026-09-17
-V17.4.32: 佐料整包（初盘为锚；水位看路径；SP+让球+Edge+双闸门+降维同屏；禁只看即时SP）
-source: 09-1
+V17.4.29: 深盘陷阱阈值放宽（亚盘≥0.75/
