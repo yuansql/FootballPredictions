@@ -1,4 +1,12 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-09-22 14:45:05
+version_note: V17.4.46 λ比分校准（候选池排序+否证；进球优先吃λ；禁泊松Top1焊主推）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-22 14:39:53
+version_note: V17.4.45 推比分来源卡（主/次/防=情景装箱；序=方向→倾向→净胜档→三格→进球）
+
+# football-predict-v17 sync stamp
 synced_at: 2026-09-22 14:28:18
 version_note: V17.4.44 捷报四页签（现场分析/数据分析/胜平负/三合一）
 
