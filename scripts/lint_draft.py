@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.41 日闸 lint 工具
+lint_draft.py — V17.4.50 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -9,7 +9,7 @@ lint_draft.py — V17.4.41 日闸 lint 工具
 4. lint_lean_pack — 验证倾向 ∈ 允许集（4.22.4）
 5. lint_exclude_three_step — 验证 排除|剩余|二次 固定行（4.27）
 6. lint_exclude_intel_gate — 排除三件套：排胜负边须硬情报或盘口质疑（4.31）
-7. lint_seasoning_pack — 佐料整包：可介入须见初盘+水位（4.32）
+7. lint_seasoning_pack — 佐料整包：可介入须见初盘+水位（4.32/4.50 类型诚实）
 8. lint_euro_deep_away — 欧战深盘客：欧战场锁客须见闸行（4.33）
 9. lint_dual_debut_lock — 双新军锁主：双新军叙事+锁主须见闸行（4.33）
 10. lint_summary_table — 全场汇总表：编号/排除/推方向/单子倾向/推比分/推进球（4.34）
@@ -18,6 +18,7 @@ lint_draft.py — V17.4.41 日闸 lint 工具
 13. lint_hc_spf_single — 文末【让球稳健推荐】无|≤3（4.38；兼容旧块名）
 14. lint_deep_lock_receipt — 深让+锁*须【深让可锁】+初盘/水位（4.40）
 15. lint_today_ticket — 文末【今日票面】空仓|方案+腿（4.41）
+16. lint_delivery_pack — 交卷模式/初盘类型/认真拆≤3/伤停未知禁PROCEED（4.50）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -41,6 +42,8 @@ lint_draft.py — V17.4.41 日闸 lint 工具
     HC_SPF_SINGLE_DAY = "2026-09-20"
     DEEP_LOCK_DAY = "2026-09-22"
     TICKET_DAY = "2026-09-22"
+    LINEUP_GATE_DAY = "2026-09-22"
+    DELIVERY_DAY = "2026-09-22"
 """
 
 import sys
@@ -65,6 +68,9 @@ COLD_UPSET_DAY = "2026-09-20"  # 冷门预防统一亮牌
 HC_SPF_SINGLE_DAY = "2026-09-20"  # 让球稳健可荐文末块
 DEEP_LOCK_DAY = "2026-09-22"  # 深让+锁*须【深让可锁】收据
 TICKET_DAY = "2026-09-22"  # 【今日票面】主交卷（4.41）
+LINEUP_GATE_DAY = "2026-09-22"  # 票面非空仓须【临场闸】（4.47）
+DELIVERY_DAY = "2026-09-22"  # 交卷模式/初盘类型/认真拆≤3/伤停未知（4.50）
+FLOW_FIX_DAY = "2026-09-22"  # 流程消矛盾：深让竞彩现盘/冷门仅认真拆（4.51）
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -343,8 +349,13 @@ def lint_lean_pack(sections: list[dict], day: str | None = None) -> list[dict]:
 
 
 def _parse_remaining_set(rem_raw: str) -> set[str]:
-    """Parse 剩余={主胜,平} or {主,平}/{客,平}/{主,客}."""
+    """Parse 剩余={主胜,平} or {主,平}/{客,平}/{主,客} or {主胜,平,客胜}（暂缓）."""
     s = rem_raw.replace('，', ',').strip()
+    # 三向须优先于「主胜,平」子串匹配（V17.4.47 暂缓）
+    if ('主胜' in s and '客胜' in s and '平' in s) or re.search(
+        r'主\s*,\s*平\s*,\s*客|主\s*,\s*客\s*,\s*平|平\s*,\s*主\s*,\s*客', s
+    ):
+        return {'主胜', '平', '客胜'}
     if re.search(r'主胜\s*,\s*平|平\s*,\s*主胜', s) or re.search(r'^\s*主\s*,\s*平\s*$', s) or re.search(r'^\s*平\s*,\s*主\s*$', s):
         return {'主胜', '平'}
     if re.search(r'客胜\s*,\s*平|平\s*,\s*客胜', s) or re.search(r'^\s*客\s*,\s*平\s*$', s) or re.search(r'^\s*平\s*,\s*客\s*$', s):
@@ -361,7 +372,7 @@ def _parse_remaining_set(rem_raw: str) -> set[str]:
 def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> list[dict]:
     """
     V17.4.27：01 每场须有 排除=｜剩余=｜二次=（二次须含 倾斜…→ 或 分不清→ 分叉）。
-    剩{主胜,客胜} 禁止二次写主不败/客不败。
+    V17.4.47：排除=暂缓 合法（剩余期望三向）；剩{主胜,客胜} 禁止二次写主不败/客不败。
     """
     if day and day < EXCLUDE_DAY:
         return []
@@ -377,7 +388,7 @@ def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> lis
         if '方向=' not in blob and '【方向三步】' not in blob and '排除=' not in blob:
             continue
 
-        m_ex = re.search(r'排除\s*=\s*(主胜|平|客胜)', blob)
+        m_ex = re.search(r'排除\s*=\s*(主胜|平|客胜|暂缓)', blob)
         m_rem = re.search(r'剩余\s*=\s*\{([^}]+)\}', blob)
         # 二次=… → 锁主|…  （允许中间夹 倾斜/分不清/深让降维）
         m_sec = re.search(
@@ -392,7 +403,7 @@ def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> lis
                 'rule': 'lint_exclude_three_step',
                 'severity': 'ERROR',
                 'match': header,
-                'message': '缺少 排除=<主胜|平|客胜>（V17.4.27 固定行）',
+                'message': '缺少 排除=<主胜|平|客胜|暂缓>（V17.4.27/4.47 固定行）',
             })
             continue
 
@@ -444,7 +455,15 @@ def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> lis
             })
             continue
 
-        if rem_tokens and len(rem_tokens) == 2:
+        if exclude == '暂缓':
+            if rem_tokens and rem_tokens != {'主胜', '平', '客胜'}:
+                warnings.append({
+                    'rule': 'lint_exclude_three_step',
+                    'severity': 'WARN',
+                    'match': header,
+                    'message': f"排除=暂缓 时剩余期望 {{主胜,平,客胜}}，实为 {rem_tokens}（V17.4.47）",
+                })
+        elif rem_tokens and len(rem_tokens) == 2:
             expected = valid_exclude - {exclude}
             if rem_tokens != expected:
                 warnings.append({
@@ -462,20 +481,21 @@ def lint_exclude_three_step(sections: list[dict], day: str | None = None) -> lis
                 'message': '剩余={主胜,客胜} 禁止二次写主不败/客不败（须锁主|锁客）',
             })
 
-        if secondary == '主不败' and rem_tokens and rem_tokens != {'主胜', '平'}:
-            warnings.append({
-                'rule': 'lint_exclude_three_step',
-                'severity': 'WARN',
-                'match': header,
-                'message': f"二次→主不败 但剩余={rem_tokens}（期望 {{主胜,平}}）",
-            })
-        if secondary == '客不败' and rem_tokens and rem_tokens != {'客胜', '平'}:
-            warnings.append({
-                'rule': 'lint_exclude_three_step',
-                'severity': 'WARN',
-                'match': header,
-                'message': f"二次→客不败 但剩余={rem_tokens}（期望 {{客胜,平}}）",
-            })
+        if exclude != '暂缓':
+            if secondary == '主不败' and rem_tokens and rem_tokens != {'主胜', '平'}:
+                warnings.append({
+                    'rule': 'lint_exclude_three_step',
+                    'severity': 'WARN',
+                    'match': header,
+                    'message': f"二次→主不败 但剩余={rem_tokens}（期望 {{主胜,平}}）",
+                })
+            if secondary == '客不败' and rem_tokens and rem_tokens != {'客胜', '平'}:
+                warnings.append({
+                    'rule': 'lint_exclude_three_step',
+                    'severity': 'WARN',
+                    'match': header,
+                    'message': f"二次→客不败 但剩余={rem_tokens}（期望 {{客胜,平}}）",
+                })
 
     return warnings
 
@@ -484,6 +504,7 @@ def lint_exclude_intel_gate(sections: list[dict], day: str | None = None) -> lis
     """
     V17.4.31 排除三件套：排除=主胜/客胜 时，理由须含硬情报词，或质疑=含盘口词。
     禁止仅软词（主场优势/经验/名气/抵消…）排胜负边。排除=平 不强制硬词。
+    V17.4.47：排除=暂缓 跳过硬词闸（理由须非空：ICS低|揭幕|槽不足）。
     """
     if day and day < EXCLUDE_INTEL_DAY:
         return []
@@ -496,18 +517,28 @@ def lint_exclude_intel_gate(sections: list[dict], day: str | None = None) -> lis
             continue
 
         m = re.search(
-            r'排除\s*=\s*(主胜|平|客胜)\s*｜\s*理由\s*=\s*([^｜\n]+)(?:\s*｜\s*质疑\s*=\s*([^｜\n]+))?',
+            r'排除\s*=\s*(主胜|平|客胜|暂缓)\s*｜\s*理由\s*=\s*([^｜\n]+)(?:\s*｜\s*质疑\s*=\s*([^｜\n]+))?',
             blob,
         )
         if not m:
             # 兼容无「质疑=」旧行：排除=X｜理由=Y
-            m = re.search(r'排除\s*=\s*(主胜|平|客胜)\s*｜\s*理由\s*=\s*([^｜\n]+)', blob)
+            m = re.search(r'排除\s*=\s*(主胜|平|客胜|暂缓)\s*｜\s*理由\s*=\s*([^｜\n]+)', blob)
         if not m:
             continue
 
         exclude = m.group(1)
         reason = m.group(2).strip()
         challenge = (m.group(3).strip() if m.lastindex >= 3 and m.group(3) else '')
+
+        if exclude == '暂缓':
+            if not reason or reason in ('·', '…', '-', '无'):
+                warnings.append({
+                    'rule': 'lint_exclude_intel_gate',
+                    'severity': 'ERROR',
+                    'match': header,
+                    'message': '排除=暂缓 仍须写非空理由（ICS低|揭幕|槽不足；V17.4.47）',
+                })
+            continue
 
         if exclude == '平':
             if not reason or reason in ('·', '…', '-'):
@@ -557,7 +588,8 @@ def lint_exclude_intel_gate(sections: list[dict], day: str | None = None) -> lis
 
 def lint_seasoning_pack(sections: list[dict], day: str | None = None) -> list[dict]:
     """
-    V17.4.32 佐料整包：【出票】可介入/试探 时，须同屏有初盘锚 + 水位路径标记。
+    V17.4.32 佐料整包：【出票】可介入/试探 时，须同屏有初盘锚 + 水位标记。
+    V17.4.50：初盘须标类型；竞彩现盘可用「水位=竞彩现盘对照」，禁装真开盘路径。
     观望场不强制（仍鼓励写）。
     """
     if day and day < SEASONING_DAY:
@@ -566,7 +598,12 @@ def lint_seasoning_pack(sections: list[dict], day: str | None = None) -> list[di
     warnings = []
     ticket_intervene = re.compile(r'【出票】[^\n]*(可介入|可试探|试探)')
     has_open = re.compile(r'初盘\s*=')
+    typed_open = re.compile(r'初盘\s*=\s*(真开盘|竞彩现盘|缺)')
     has_water = re.compile(r'水位路径\s*=|水位\s*=')
+    fake_path_on_jc = re.compile(
+        r'初盘\s*=\s*竞彩现盘[^\n]*(水位路径\s*=\s*(稳定|撤热|灌热|背离)|水位\s*=\s*(稳定|撤热|灌热|背离))'
+    )
+    missing_type_open = re.compile(r'初盘(?:锚)?\s*=(?!\s*(真开盘|竞彩现盘|缺))')
 
     for sec in sections:
         header = sec['header']
@@ -574,14 +611,32 @@ def lint_seasoning_pack(sections: list[dict], day: str | None = None) -> list[di
         if not ticket_intervene.search(blob):
             continue
         if '不荐' in blob and re.search(r'【出票】[^\n]*不荐', blob):
-            # 同行既可介入又不荐极少；若明确不荐则跳过
             if re.search(r'【出票】\s*不荐', blob) and not re.search(r'【出票】[^\n]*可介入', blob):
                 continue
         missing = []
         if not has_open.search(blob):
             missing.append('初盘=')
+        elif day and day >= DELIVERY_DAY and not typed_open.search(blob):
+            # 有初盘=但未标类型
+            if missing_type_open.search(blob) or re.search(r'初盘锚\s*=', blob):
+                warnings.append({
+                    'rule': 'lint_seasoning_pack',
+                    'severity': 'ERROR',
+                    'match': header,
+                    'message': (
+                        '出票可介入须写 初盘=真开盘|竞彩现盘|缺（禁初盘锚=无类型；V17.4.50）'
+                    ),
+                })
+        if re.search(r'初盘\s*=\s*缺', blob):
+            warnings.append({
+                'rule': 'lint_seasoning_pack',
+                'severity': 'ERROR',
+                'match': header,
+                'message': '初盘=缺 禁止出票可介入 (V17.4.50)',
+            })
+            continue
         if not has_water.search(blob):
-            missing.append('水位路径=')
+            missing.append('水位路径=|水位=')
         if missing:
             warnings.append({
                 'rule': 'lint_seasoning_pack',
@@ -589,17 +644,123 @@ def lint_seasoning_pack(sections: list[dict], day: str | None = None) -> list[di
                 'match': header,
                 'message': (
                     f'出票可介入但缺佐料整包标记 {",".join(missing)}；'
-                    f'初盘为锚、水位看路径，禁只报即时SP (V17.4.32)'
+                    f'初盘为锚、水位看路径/对照，禁只报即时SP (V17.4.32/4.50)'
+                ),
+            })
+        if day and day >= DELIVERY_DAY and fake_path_on_jc.search(blob):
+            warnings.append({
+                'rule': 'lint_seasoning_pack',
+                'severity': 'ERROR',
+                'match': header,
+                'message': (
+                    '初盘=竞彩现盘 禁止写撤热/灌热/背离开盘路径；'
+                    '须水位=竞彩现盘对照 (V17.4.50)'
                 ),
             })
 
     return warnings
 
 
+def lint_delivery_pack(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
+    """
+    V17.4.50：文首交卷模式；扫盘初盘类型；认真拆（含取证清单）≤3；伤停未知禁 PROCEED。
+    """
+    if day and day < DELIVERY_DAY:
+        return []
+    if not filepath:
+        return []
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except OSError:
+        return [{
+            'rule': 'lint_delivery_pack',
+            'severity': 'ERROR',
+            'match': filepath,
+            'message': '无法读取文件做交卷二分检查',
+        }]
+
+    warnings = []
+    # 文首（首个 ## 之前）须点名交卷模式
+    head = content.split('\n## ', 1)[0]
+    if not re.search(r'交卷模式\s*=\s*(研究板|下注单)', head):
+        warnings.append({
+            'rule': 'lint_delivery_pack',
+            'severity': 'ERROR',
+            'match': '文首',
+            'message': '文首须写 交卷模式=研究板|下注单 (V17.4.50)',
+        })
+
+    # 认真拆：含「### 取证清单」或「【取证清单】」的比赛段
+    deep_headers = []
+    for sec in sections:
+        blob = '\n'.join(sec['lines'])
+        if re.search(r'###?\s*取证清单|【取证清单】', blob):
+            deep_headers.append(sec['header'])
+    if len(deep_headers) > 3:
+        warnings.append({
+            'rule': 'lint_delivery_pack',
+            'severity': 'ERROR',
+            'match': '全文',
+            'message': (
+                f'重点认真拆 {len(deep_headers)} 场（含取证清单）>3；'
+                f'须砍到≤3 或亲爱的点名破例 (V17.4.50)：'
+                + '；'.join(h[:24] for h in deep_headers[:6])
+            ),
+        })
+
+    injury_unknown = re.compile(
+        r'伤停[^\n]{0,40}(未知|未见|无可靠源|槽弱)|伤停\s*[=：:]\s*(未知|未见|无可靠源|槽弱)'
+    )
+    proceed_re = re.compile(r'(?:动作\s*[=：:]\s*)?PROCEED|ICS[^\n]{0,30}PROCEED')
+    typed_open = re.compile(r'初盘\s*=\s*(真开盘|竞彩现盘|缺)')
+    any_open = re.compile(r'初盘(?:锚)?\s*=')
+    path_words = re.compile(r'水位路径\s*=\s*(稳定|撤热|灌热|背离)|水位\s*=\s*(稳定|撤热|灌热|背离)')
+
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        if injury_unknown.search(blob) and proceed_re.search(blob):
+            warnings.append({
+                'rule': 'lint_delivery_pack',
+                'severity': 'ERROR',
+                'match': header,
+                'message': '伤停未知/未见/槽弱 禁止 PROCEED 装齐全；最高 CAUTION (V17.4.50)',
+            })
+        # 有扫盘/出票痕迹时须标初盘类型（有初盘=或现SP+让球同屏）
+        has_scan = bool(
+            any_open.search(blob)
+            or re.search(r'现\s*SP\s*=|JC_SP\s*=|让球现\s*=', blob)
+        )
+        if has_scan and any_open.search(blob) and not typed_open.search(blob):
+            warnings.append({
+                'rule': 'lint_delivery_pack',
+                'severity': 'ERROR',
+                'match': header,
+                'message': '扫盘须写 初盘=真开盘|竞彩现盘|缺（禁无类型的初盘锚=；V17.4.50）',
+            })
+        if re.search(r'初盘\s*=\s*竞彩现盘', blob) and path_words.search(blob):
+            # 允许同屏有真开盘叙事时例外：若同时写了真开盘则不拦
+            if not re.search(r'初盘\s*=\s*真开盘', blob):
+                warnings.append({
+                    'rule': 'lint_delivery_pack',
+                    'severity': 'ERROR',
+                    'match': header,
+                    'message': (
+                        '初盘=竞彩现盘 禁止撤热/灌热/背离路径词；'
+                        '写水位=竞彩现盘对照 (V17.4.50)'
+                    ),
+                })
+
+    return warnings
+
+
 def lint_deep_lock_receipt(sections: list[dict], day: str | None = None) -> list[dict]:
     """
-    V17.4.40：触深让/深热警示且方向=锁* 时，须【深让可锁】且含初盘= + 水位=/水位路径=。
-    走不败/降维不拦。检测：明确深让词，或让球≤-1.5/≥+1.5，或热侧 SP≤1.35。
+    V17.4.40/4.51：触深让/深热警示且方向=锁* 时，须【深让可锁】。
+    真开盘：初盘= + 水位=/水位路径=
+    竞彩现盘：初盘=竞彩现盘 + 现盘=（水位=竞彩现盘对照可替代路径）
+    走不败/降维不拦。
     """
     if day and day < DEEP_LOCK_DAY:
         return []
@@ -612,8 +773,12 @@ def lint_deep_lock_receipt(sections: list[dict], day: str | None = None) -> list
         r'(?:客[让\+]?)?\+?(?:1\.5|2(?:\.0)?|2\.5|3)'
     )
     banner_re = re.compile(r'【深让可锁】[^\n]*')
+    typed_open = re.compile(r'初盘\s*=\s*(真开盘|竞彩现盘|缺)')
     has_open = re.compile(r'初盘\s*=')
     has_water = re.compile(r'水位路径\s*=|水位\s*=')
+    has_spot = re.compile(r'现盘\s*=')
+    jc_open = re.compile(r'初盘\s*=\s*竞彩现盘')
+    true_open = re.compile(r'初盘\s*=\s*真开盘')
     sp_home_re = re.compile(r'(?:主胜\s*SP|SP[_ ]?H|主\s*SP)\s*[=:：]?\s*(\d+\.?\d*)', re.I)
     sp_away_re = re.compile(r'(?:客胜\s*SP|SP[_ ]?A|客\s*SP)\s*[=:：]?\s*(\d+\.?\d*)', re.I)
 
@@ -624,10 +789,9 @@ def lint_deep_lock_receipt(sections: list[dict], day: str | None = None) -> list
         lm = lock_re.search(blob)
         if not lm:
             continue
-        lock_side = lm.group(1) or lm.group(2)  # 主|客
+        lock_side = lm.group(1) or lm.group(2)
         deep = bool(deep_word_re.search(blob) or deep_ah_re.search(blob))
         if not deep:
-            # 热侧 SP≤1.35 也算深热警示
             if lock_side == '主':
                 sm = sp_home_re.search(blob)
                 if sm and float(sm.group(1)) <= 1.35:
@@ -645,16 +809,62 @@ def lint_deep_lock_receipt(sections: list[dict], day: str | None = None) -> list
                 'severity': 'ERROR',
                 'match': header,
                 'message': (
-                    '深让/深热警示下锁* 须写【深让可锁】触发=是｜初盘=…｜水位=… '
-                    '(V17.4.40；禁空喊锁*)'
+                    '深让/深热警示下锁* 须写【深让可锁】'
+                    '（真开盘：初盘+水位；竞彩现盘：初盘=竞彩现盘+现盘；V17.4.51）'
                 ),
             })
             continue
         line = bm.group(0)
+        scope = line + '\n' + blob
+        if not has_open.search(scope):
+            warnings.append({
+                'rule': 'lint_deep_lock_receipt',
+                'severity': 'ERROR',
+                'match': header,
+                'message': '【深让可锁】缺 初盘= (V17.4.40/4.51)',
+            })
+            continue
+        # ≥FLOW_FIX：按初盘类型分支校验
+        if day and day >= FLOW_FIX_DAY:
+            if not typed_open.search(scope):
+                warnings.append({
+                    'rule': 'lint_deep_lock_receipt',
+                    'severity': 'ERROR',
+                    'match': header,
+                    'message': (
+                        '【深让可锁】须 初盘=真开盘|竞彩现盘|缺 (V17.4.51)'
+                    ),
+                })
+                continue
+            if jc_open.search(scope):
+                if not has_spot.search(scope) and not re.search(
+                    r'水位\s*=\s*竞彩现盘对照', scope
+                ):
+                    warnings.append({
+                        'rule': 'lint_deep_lock_receipt',
+                        'severity': 'ERROR',
+                        'match': header,
+                        'message': (
+                            '初盘=竞彩现盘 的【深让可锁】须 现盘= '
+                            '或 水位=竞彩现盘对照（禁假写撤热路径；V17.4.51）'
+                        ),
+                    })
+                continue
+            if true_open.search(scope) and not has_water.search(scope):
+                warnings.append({
+                    'rule': 'lint_deep_lock_receipt',
+                    'severity': 'ERROR',
+                    'match': header,
+                    'message': (
+                        '初盘=真开盘 的【深让可锁】须 水位= 或 水位路径= (V17.4.51)'
+                    ),
+                })
+            continue
+        # 旧日闸：初盘 + 水位
         missing = []
-        if not has_open.search(line) and not has_open.search(blob):
+        if not has_open.search(scope):
             missing.append('初盘=')
-        if not has_water.search(line) and not has_water.search(blob):
+        if not has_water.search(scope):
             missing.append('水位=')
         if missing:
             warnings.append({
@@ -793,7 +1003,8 @@ def lint_handicap_only_channel(sections: list[dict], day: str | None = None) -> 
 
 def lint_cold_upset_banner(sections: list[dict], day: str | None = None) -> list[dict]:
     """
-    V17.4.37：场场须【冷门预防】触发=是|否。
+    V17.4.37：认真拆须【冷门预防】触发=是|否。
+    V17.4.51：观察骨架（无取证清单）免写。
     专闸已亮灯时禁止写触发=否；触发=是须命中= + 动作=。
     """
     if day and day < COLD_UPSET_DAY:
@@ -804,6 +1015,7 @@ def lint_cold_upset_banner(sections: list[dict], day: str | None = None) -> list
     trigger_no = re.compile(r'触发\s*=\s*否')
     hit_re = re.compile(r'命中\s*=')
     action_re = re.compile(r'动作\s*=')
+    deep_mark = re.compile(r'###?\s*取证清单|【取证清单】')
 
     lit_patterns = [
         (re.compile(r'【欧战深盘客闸】[^\n]*触发\s*=\s*是'), '欧战深盘客'),
@@ -819,13 +1031,19 @@ def lint_cold_upset_banner(sections: list[dict], day: str | None = None) -> list
     for sec in sections:
         header = sec['header']
         blob = '\n'.join(sec['lines'])
+        if day and day >= FLOW_FIX_DAY and not deep_mark.search(blob):
+            continue
         m = banner_re.search(blob)
         if not m:
             warnings.append({
                 'rule': 'lint_cold_upset_banner',
                 'severity': 'ERROR',
                 'match': header,
-                'message': '须写【冷门预防】触发=是|否（V17.4.37 统一亮牌）',
+                'message': (
+                    '认真拆须写【冷门预防】触发=是|否（观察骨架免写；V17.4.51）'
+                    if (day and day >= FLOW_FIX_DAY)
+                    else '须写【冷门预防】触发=是|否（V17.4.37 统一亮牌）'
+                ),
             })
             continue
         line = m.group(0)
@@ -936,7 +1154,7 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
         }]
 
     warnings = []
-    m = re.search(r'【今日票面】([\s\S]*?)(?=\n【|\n## |\Z)', content)
+    m = re.search(r'【今日票面】([\s\S]*?)(?=\n## |\Z)', content)
     if not m:
         warnings.append({
             'rule': 'lint_today_ticket',
@@ -987,6 +1205,44 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
             'match': filepath,
             'message': '【今日票面】禁止用不败当结算腿（V17.4.41）',
         })
+    # V17.4.49 临场闸：票空仓免写；非空仓真下才须【临场闸】。
+    # 废止「待临场确认」。XI=未确认 → 仅撤腿|降观望；已确认才保留。
+    if not (day and day < LINEUP_GATE_DAY):
+        has_gate = bool(re.search(r'【临场闸】|临场闸\s*=', body))
+        if re.search(r'动作\s*=\s*待临场确认', body):
+            warnings.append({
+                'rule': 'lint_today_ticket',
+                'severity': 'ERROR',
+                'match': filepath,
+                'message': '废止动作=待临场确认（日间 XI 拿不到，勿空转；V17.4.49）',
+            })
+        if not has_gate:
+            # 非空仓可不强制临场闸（日间研究可先给腿）；若写了闸则按下述校验
+            pass
+        else:
+            if not re.search(r'XI\s*=\s*(未确认|已确认)', body):
+                warnings.append({
+                    'rule': 'lint_today_ticket',
+                    'severity': 'ERROR',
+                    'match': filepath,
+                    'message': '【临场闸】须含 XI=未确认|已确认（V17.4.49）',
+                })
+            xi_unconfirmed = bool(re.search(r'XI\s*=\s*未确认', body))
+            action_keep = bool(re.search(r'动作\s*=\s*保留\b', body))
+            if xi_unconfirmed and action_keep:
+                warnings.append({
+                    'rule': 'lint_today_ticket',
+                    'severity': 'ERROR',
+                    'match': filepath,
+                    'message': 'XI=未确认 禁止动作=保留（须撤腿|降观望|改空仓；V17.4.49）',
+                })
+            if xi_unconfirmed and not re.search(r'动作\s*=\s*(撤腿|降观望)', body):
+                warnings.append({
+                    'rule': 'lint_today_ticket',
+                    'severity': 'ERROR',
+                    'match': filepath,
+                    'message': '临场闸 XI=未确认 → 动作须撤腿|降观望（V17.4.49）',
+                })
     return warnings
 
 
@@ -1156,7 +1412,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -1228,6 +1484,15 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_today_ticket] ✓ 通过")
+
+        w_delivery = lint_delivery_pack(sections, day, filepath=filepath)
+        all_warnings.extend(w_delivery)
+        if w_delivery:
+            print(f"\n[lint_delivery_pack] 发现 {len(w_delivery)} 个问题:")
+            for item in w_delivery:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_delivery_pack] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)
@@ -1346,20 +1611,27 @@ def lint_deep_away_trap(sections: list[dict], day: str | None = None) -> list[di
 
 
 def lint_ics_check(sections: list[dict], day: str | None = None) -> list[dict]:
-    """P3: ICS 情报质量评分检查。"""
+    """P3: ICS / 情报档检查。V17.4.51：认情报档=；观察骨架免强制。"""
     if day and day < ICS_MIN_DAY:
         return []
+    deep_mark = re.compile(r'###?\s*取证清单|【取证清单】')
     warnings: list[dict] = []
     for sec in sections:
-        body = sec.get("body", "")
-        # 简化检查：查找 ICS 标记
-        has_ics = "ICS" in body or "情报质量评分" in body
+        body = sec.get("body", "") or '\n'.join(sec.get('lines', []))
+        if day and day >= FLOW_FIX_DAY and not deep_mark.search(body):
+            continue
+        has_ics = (
+            "ICS" in body
+            or "情报质量评分" in body
+            or "情报档=" in body
+            or "情报档＝" in body
+        )
         if not has_ics:
             warnings.append({
                 "rule": "lint_ics_missing",
                 "severity": "WARN",
                 "match": sec.get("header", "")[:40],
-                "message": "未写 ICS 情报质量评分 → 须补 (V17.4.24)",
+                "message": "认真拆未写 情报档=/ICS → 须补 (V17.4.51)",
             })
     return warnings
 
@@ -1556,11 +1828,21 @@ def _self_check() -> None:
         'lines': [
             '深让警示触线',
             '方向=锁主',
-            '【深让可锁】触发=是｜初盘=主-2｜水位=稳｜现盘=主-2｜依据=盘口｜档差够',
+            '【深让可锁】触发=是｜初盘=真开盘｜水位=稳｜现盘=主-2｜依据=盘口｜档差够',
             '二次=倾斜主胜 → 锁主｜单子腿=主胜',
         ],
     }]
     assert lint_deep_lock_receipt(good, day='2026-09-22') == []
+    jc_ok = [{
+        'header': '周日003 深让场 vs 客',
+        'lines': [
+            '深让警示触线',
+            '方向=锁主',
+            '【深让可锁】触发=是｜初盘=竞彩现盘｜现盘=主-2｜水位=竞彩现盘对照｜依据=现盘结构｜档差够',
+            '二次=倾斜主胜 → 锁主｜单子腿=主胜',
+        ],
+    }]
+    assert lint_deep_lock_receipt(jc_ok, day='2026-09-22') == []
     soft = [{
         'header': '周日002 贴脸场 vs 客',
         'lines': [
@@ -1570,11 +1852,50 @@ def _self_check() -> None:
         ],
     }]
     assert lint_deep_lock_receipt(soft, day='2026-09-22') == []
-    print('self-check parse headers + deep_lock: ok')
+    # 观察骨架免冷门预防
+    skel = [{
+        'header': '周二099 骨架 vs 客',
+        'lines': ['排除=客胜｜理由=火力｜质疑=无', '方向=主不败'],
+    }]
+    assert lint_cold_upset_banner(skel, day='2026-09-22') == []
+    # V17.4.50 交卷二分
+    import tempfile
+    with tempfile.NamedTemporaryFile('w', suffix='.md', delete=False, encoding='utf-8') as tf:
+        tf.write(
+            '# 测\n交卷模式=研究板\n\n'
+            '## 周二001 A vs B\n'
+            '伤停=未见｜ICS≈80｜PROCEED\n'
+            '初盘锚=竞彩让球主-1｜水位路径=撤热\n'
+            '现SP=1.2/4/8｜让球现=主-1\n'
+        )
+        bad_path = tf.name
+    try:
+        bad_secs = [{
+            'header': '周二001 A vs B',
+            'lines': [
+                '伤停=未见｜ICS≈80｜PROCEED',
+                '初盘锚=竞彩让球主-1｜水位路径=撤热',
+                '现SP=1.2/4/8｜让球现=主-1',
+            ],
+        }]
+        w_del = lint_delivery_pack(bad_secs, day='2026-09-22', filepath=bad_path)
+        assert any('PROCEED' in x['message'] for x in w_del)
+        assert any('初盘=' in x['message'] for x in w_del)
+        with open(bad_path, 'w', encoding='utf-8') as f:
+            f.write('# 测\n\n## 周二001 A vs B\n方向=锁主\n')
+        w_mode = lint_delivery_pack(
+            [{'header': '周二001 A vs B', 'lines': ['方向=锁主']}],
+            day='2026-09-22',
+            filepath=bad_path,
+        )
+        assert any('交卷模式' in x['message'] for x in w_mode)
+    finally:
+        os.unlink(bad_path)
+    print('self-check parse headers + deep_lock + delivery + cold_skel: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.40 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.51 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')

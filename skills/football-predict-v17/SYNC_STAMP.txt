@@ -1,4 +1,24 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-09-22 16:55:11
+version_note: V17.4.51 流程消矛盾（汇总表比分跟交卷模式；票面主交卷按模式；深让A兼容竞彩现盘；方向冻结；ICS改档；骨架再砍；H2H正式/友谊；V15.6仅认真拆可介入）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-22 15:52:54
+version_note: V17.4.50 交卷二分+初盘诚实+分诊≤3+伤停未知封顶（研究板|下注单；初盘=真开盘|竞彩现盘|缺；lint_delivery_pack）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-22 15:34:44
+version_note: V17.4.49 临场闸免空转（日间/空仓免写；废待临场确认；真下才核XI）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-22 15:02:03
+version_note: V17.4.48 临场闸分时（日间未确认→待临场确认；T-60才强制撤/降）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-22 14:59:37
+version_note: V17.4.47 职业流程（临场闸；否证回流；排除暂缓；比分默认弃权）
+
+# football-predict-v17 sync stamp
 synced_at: 2026-09-22 14:45:05
 version_note: V17.4.46 λ比分校准（候选池排序+否证；进球优先吃λ；禁泊松Top1焊主推）
 
