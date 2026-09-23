@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.53 日闸 lint 工具
+lint_draft.py — V17.4.56 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -22,6 +22,7 @@ lint_draft.py — V17.4.53 日闸 lint 工具
 17. lint_fake_heat_cold_exclude — 假热质疑禁止排冷侧无硬情报（4.52）
 18. lint_thin_intel_score — 薄情报/伤停未知研究板装满三格须弱置信（4.52）
 19. lint_quality_layer — 认真拆主菜质量层四槽；杯赛赛程须含轮换类词；全缺禁锁*满星（4.53）
+20. lint_cup_unveiling_accuracy — 杯赛揭幕：不败须豁免行；薄情报强制比分弃权（4.56）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -50,6 +51,7 @@ lint_draft.py — V17.4.53 日闸 lint 工具
     FLOW_FIX_DAY = "2026-09-22"
     JUDGE_FIX_DAY = "2026-09-22"
     QUALITY_LAYER_DAY = "2026-09-23"
+    ACCURACY_DAY = "2026-09-23"
 """
 
 import sys
@@ -79,6 +81,7 @@ DELIVERY_DAY = "2026-09-22"  # 交卷模式/初盘类型/认真拆≤3/伤停未
 FLOW_FIX_DAY = "2026-09-22"  # 流程消矛盾：深让竞彩现盘/冷门仅认真拆（4.51）
 JUDGE_FIX_DAY = "2026-09-22"  # 弱方向/假热闸/薄情报比分（4.52）
 QUALITY_LAYER_DAY = "2026-09-23"  # 主菜质量层四槽（4.53）
+ACCURACY_DAY = "2026-09-23"  # 准度/杯赛揭幕（4.56）
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -1000,6 +1003,67 @@ def lint_quality_layer(sections: list[dict], day: str | None = None) -> list[dic
     return warnings
 
 
+def lint_cup_unveiling_accuracy(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.56：杯赛揭幕准度闸。
+    - 揭幕场写主不败/客不败须有【杯赛揭幕闸】+豁免=非空（禁纯联赛外推）
+    - 揭幕+（伤停未知|偏薄/不足）装箱三格 → 强制比分弃权（弱置信不可绕过）
+    """
+    if day and day < ACCURACY_DAY:
+        return []
+
+    cupish = re.compile(r'杯|锦标赛|英锦|联赛杯|足总杯|社区盾|超级杯|欧冠|欧联|欧协')
+    unveil = re.compile(r'揭幕|首秀|英锦|锦标赛')
+    undefeated = re.compile(r'主不败|客不败')
+    gate = re.compile(r'【杯赛揭幕闸】')
+    injury_unknown = re.compile(
+        r'伤停[^\n]{0,40}(未知|未见|无可靠源|槽弱)|伤停\s*[=：:]\s*(未知|未见|无可靠源|槽弱)'
+    )
+    thin = re.compile(r'情报档\s*=\s*(偏薄|不足)')
+    abandon = re.compile(r'比分弃权')
+    packed = re.compile(
+        r'主\s*/\s*次\s*/\s*防\s*=\s*\d|主/次/防\s*=\s*\d|'
+        r'\d\s*[-:]\s*\d\s*/\s*\d\s*[-:]\s*\d\s*/\s*\d\s*[-:]\s*\d'
+    )
+    exempt_ok = re.compile(
+        r'豁免\s*=\s*(雷速|名单|伤停有源|非联赛|硬情报|[^\n无][^\n]{2,})'
+    )
+
+    warnings = []
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        if not re.search(r'###?\s*取证清单|【取证清单】', blob):
+            continue
+        is_cup = bool(cupish.search(header) or cupish.search(blob))
+        is_unveil = bool(unveil.search(header) or unveil.search(blob))
+        if not (is_cup and is_unveil):
+            continue
+        if undefeated.search(blob):
+            # 观望场若同时残留「主不败」词也拦——须闸
+            if not (gate.search(blob) and exempt_ok.search(blob) and not re.search(r'豁免\s*=\s*无\b', blob)):
+                warnings.append({
+                    'rule': 'lint_cup_unveiling_accuracy',
+                    'severity': 'ERROR',
+                    'match': header,
+                    'message': (
+                        '杯赛揭幕写主/客不败须【杯赛揭幕闸】豁免=雷速伤停有源|非联赛外推硬情报；'
+                        '禁纯联赛近况+让球民意 (V17.4.56)'
+                    ),
+                })
+        if (injury_unknown.search(blob) or thin.search(blob)) and packed.search(blob) and not abandon.search(blob):
+            warnings.append({
+                'rule': 'lint_cup_unveiling_accuracy',
+                'severity': 'ERROR',
+                'match': header,
+                'message': (
+                    '杯赛揭幕+伤停未知/偏薄须强制比分弃权；'
+                    '禁弱置信闷平三格充好看 (V17.4.56)'
+                ),
+            })
+    return warnings
+
+
 def lint_deep_lock_receipt(sections: list[dict], day: str | None = None) -> list[dict]:
     """
     V17.4.40/4.51：触深让/深热警示且方向=锁* 时，须【深让可锁】。
@@ -1660,7 +1724,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -1769,6 +1833,16 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_quality_layer] ✓ 通过")
+
+
+        w_cup = lint_cup_unveiling_accuracy(sections, day)
+        all_warnings.extend(w_cup)
+        if w_cup:
+            print(f"\n[lint_cup_unveiling_accuracy] 发现 {len(w_cup)} 个问题:")
+            for item in w_cup:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_cup_unveiling_accuracy] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)
@@ -2271,11 +2345,41 @@ def _self_check() -> None:
         assert any('交卷模式' in x['message'] for x in w_mode)
     finally:
         os.unlink(bad_path)
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53: ok')
+    
+    # V17.4.56 杯赛揭幕准度
+    cup_bad = [{
+        'header': '周二003 诺茨郡 vs 格里姆｜英锦标赛 · 揭幕',
+        'lines': [
+            '【取证清单】',
+            '伤停=未见',
+            '情报档=偏薄｜CAUTION',
+            '方向=客不败｜弱置信=是',
+            '单子倾向=不定',
+            '主/次/防=1-1/0-1/1-2',
+        ],
+    }]
+    w56 = lint_cup_unveiling_accuracy(cup_bad, day='2026-09-23')
+    assert any('豁免' in x['message'] for x in w56)
+    assert any('比分弃权' in x['message'] for x in w56)
+    cup_ok = [{
+        'header': '周二003 诺茨郡 vs 格里姆｜英锦标赛 · 揭幕',
+        'lines': [
+            '【取证清单】',
+            '伤停=未见',
+            '情报档=偏薄｜CAUTION',
+            '方向=观望｜弱置信=是',
+            '比分弃权',
+            '进球=1-3',
+            '【杯赛揭幕闸】触发=是｜豁免=无｜方向=观望｜比分=弃权',
+        ],
+    }]
+    assert lint_cup_unveiling_accuracy(cup_ok, day='2026-09-23') == []
+
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.53 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.56 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')

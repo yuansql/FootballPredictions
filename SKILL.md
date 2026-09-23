@@ -34,6 +34,7 @@ description: >-
     主菜质量层 V17.4.53（认真拆四槽：机会质量/风格对位/赛程·轮换/比赛状态；可缺禁编；杯赛强制写轮换；禁整包塞xG/PPDA必填）.
     雷速后备源 V17.4.54（质量层/技术统计捷报缺→ego 雷速；禁荐单；仍可缺禁编）.
     雷速取证速查 V17.4.55（detail/shujufenxi/3in1/lishijiaofeng/wanchang URL；射正·危险进攻代理xG；禁推荐/自媒体）.
+    准度优先 V17.4.56（北极星=方向+比分命中；杯赛揭幕禁纯联赛外推焊不败；揭幕+薄情报强制比分弃权）.
     全表防懒见 防偷懒.md（骨架≠模板×N；lint 0场=FAIL）.
   Mandatory 排除|剩余|二次 fixed lines; RMA exclude-bay vs lock-bay split.
   FORCE_SEARCH, match script, λ→λ′ / V15.6 / dual Edge ticket-only.

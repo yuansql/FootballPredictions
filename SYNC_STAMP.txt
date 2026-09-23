@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-09-23 11:56:53
+version_note: V17.4.56 准度优先（北极星=方向+比分命中；杯赛揭幕豁免闸；揭幕+薄情报强制比分弃权；lint_cup_unveiling_accuracy）
+
+# football-predict-v17 sync stamp
 synced_at: 2026-09-23 11:15:42
 version_note: V17.4.55 雷速取证速查（detail/shujufenxi/3in1/lishijiaofeng/wanchang；射正·危险进攻代理xG；禁推荐/自媒体）
 
