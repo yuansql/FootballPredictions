@@ -1,4 +1,16 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-09-23 11:15:42
+version_note: V17.4.55 雷速取证速查（detail/shujufenxi/3in1/lishijiaofeng/wanchang；射正·危险进攻代理xG；禁推荐/自媒体）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-23 10:31:18
+version_note: V17.4.54 雷速后备源（质量层捷报缺→ego 雷速原始数据；禁荐单；仍可缺禁编）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-23 10:29:07
+version_note: V17.4.53 主菜质量层（机会质量/风格对位/赛程·轮换/比赛状态；可缺禁编；杯赛强制轮换词；lint_quality_layer）
+
+# football-predict-v17 sync stamp
 synced_at: 2026-09-22 18:03:14
 version_note: V17.4.52 弱方向+假热闸+薄情报比分（研究板可观望/弱置信；假热≠排冷侧；伤停未知默认弃权比分；研究板文末缩；情报档词表统一；研究日复盘口径）
 

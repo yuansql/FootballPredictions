@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.52 日闸 lint 工具
+lint_draft.py — V17.4.53 日闸 lint 工具
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -21,6 +21,7 @@ lint_draft.py — V17.4.52 日闸 lint 工具
 16. lint_delivery_pack — 交卷模式/初盘类型/认真拆≤3/伤停未知禁PROCEED（4.50）
 17. lint_fake_heat_cold_exclude — 假热质疑禁止排冷侧无硬情报（4.52）
 18. lint_thin_intel_score — 薄情报/伤停未知研究板装满三格须弱置信（4.52）
+19. lint_quality_layer — 认真拆主菜质量层四槽；杯赛赛程须含轮换类词；全缺禁锁*满星（4.53）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -48,6 +49,7 @@ lint_draft.py — V17.4.52 日闸 lint 工具
     DELIVERY_DAY = "2026-09-22"
     FLOW_FIX_DAY = "2026-09-22"
     JUDGE_FIX_DAY = "2026-09-22"
+    QUALITY_LAYER_DAY = "2026-09-23"
 """
 
 import sys
@@ -76,6 +78,7 @@ LINEUP_GATE_DAY = "2026-09-22"  # 票面非空仓须【临场闸】（4.47）
 DELIVERY_DAY = "2026-09-22"  # 交卷模式/初盘类型/认真拆≤3/伤停未知（4.50）
 FLOW_FIX_DAY = "2026-09-22"  # 流程消矛盾：深让竞彩现盘/冷门仅认真拆（4.51）
 JUDGE_FIX_DAY = "2026-09-22"  # 弱方向/假热闸/薄情报比分（4.52）
+QUALITY_LAYER_DAY = "2026-09-23"  # 主菜质量层四槽（4.53）
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -913,6 +916,90 @@ def lint_delivery_pack(sections: list[dict], day: str | None = None, filepath: s
     return warnings
 
 
+def lint_quality_layer(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.53：认真拆须【主菜质量层】四槽；杯赛赛程须含轮换类词；
+    四槽值皆为光秃缺且锁*+满星(≥4) → ERROR。
+    """
+    if day and day < QUALITY_LAYER_DAY:
+        return []
+
+    cup_re = re.compile(
+        r'杯|锦标赛|英锦|联赛杯|足总杯|社区盾|超级杯|欧冠|欧联|欧协|揭幕'
+    )
+    slot_keys = ('机会质量', '风格对位', '赛程·轮换', '比赛状态')
+    # also accept 赛程轮换 without middle dot
+    slot_alt = {
+        '赛程·轮换': re.compile(r'赛程[·･・]?轮换\s*[=：:]'),
+        '机会质量': re.compile(r'机会质量\s*[=：:]'),
+        '风格对位': re.compile(r'风格对位\s*[=：:]'),
+        '比赛状态': re.compile(r'比赛状态\s*[=：:]'),
+    }
+    bare_que = None  # unused; bare缺 judged via slot value
+    rot_ok = re.compile(r'轮换|揭幕|双赛|负荷')
+    star4 = re.compile(r'★{4}')
+    lock_star = re.compile(r'方向\s*[=：:]\s*锁(主|客|平)|锁主|锁客|锁平')
+
+    warnings = []
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        if not re.search(r'###?\s*取证清单|【取证清单】', blob):
+            continue
+        if '【主菜质量层】' not in blob:
+            warnings.append({
+                'rule': 'lint_quality_layer',
+                'severity': 'ERROR',
+                'match': header,
+                'message': '认真拆须写【主菜质量层】四槽（可缺禁编；V17.4.53）',
+            })
+            continue
+        missing = [k for k, rx in slot_alt.items() if not rx.search(blob)]
+        if missing:
+            warnings.append({
+                'rule': 'lint_quality_layer',
+                'severity': 'ERROR',
+                'match': header,
+                'message': f'主菜质量层缺槽：{",".join(missing)} (V17.4.53)',
+            })
+        is_cup = bool(cup_re.search(header) or cup_re.search(blob))
+        if is_cup:
+            m = re.search(r'赛程[·･・]?轮换\s*[=：:]\s*([^\n]+)', blob)
+            val = (m.group(1) if m else '').strip()
+            # 光秃「缺」不合格；「缺｜杯赛轮换未核」因含轮换词合格
+            if not val or not rot_ok.search(val):
+                warnings.append({
+                    'rule': 'lint_quality_layer',
+                    'severity': 'ERROR',
+                    'match': header,
+                    'message': (
+                        '杯赛/揭幕 赛程·轮换 须含轮换|揭幕|双赛|负荷 '
+                        '（未知写 缺｜杯赛轮换未核；V17.4.53）'
+                    ),
+                })
+        # all four bare 缺 + lock* + ≥4 stars
+        def _slot_bare_que(key_pat: str) -> bool:
+            m = re.search(key_pat + r'\s*[=：:]\s*([^\n|｜]+)', blob)
+            if not m:
+                return False
+            return m.group(1).strip() == '缺'
+
+        all_que = all([
+            _slot_bare_que(r'机会质量'),
+            _slot_bare_que(r'风格对位'),
+            _slot_bare_que(r'赛程[·･・]?轮换'),
+            _slot_bare_que(r'比赛状态'),
+        ])
+        if all_que and lock_star.search(blob) and star4.search(blob):
+            warnings.append({
+                'rule': 'lint_quality_layer',
+                'severity': 'ERROR',
+                'match': header,
+                'message': '质量层四槽全缺禁止锁*且研究星≥★★★★；降不败/降星或补源 (V17.4.53)',
+            })
+    return warnings
+
+
 def lint_deep_lock_receipt(sections: list[dict], day: str | None = None) -> list[dict]:
     """
     V17.4.40/4.51：触深让/深热警示且方向=锁* 时，须【深让可锁】。
@@ -1573,7 +1660,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -1673,6 +1760,15 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_delivery_pack] ✓ 通过")
+
+        w_ql = lint_quality_layer(sections, day)
+        all_warnings.extend(w_ql)
+        if w_ql:
+            print(f"\n[lint_quality_layer] 发现 {len(w_ql)} 个问题:")
+            for item in w_ql:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_quality_layer] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)
@@ -2091,6 +2187,58 @@ def _self_check() -> None:
         ],
     }]
     assert lint_thin_intel_score(thin_ok, day='2026-09-22') == []
+    # V17.4.53 主菜质量层
+    ql_bad = [{
+        'header': '周二002 米尔顿vs克劳利｜英锦标赛',
+        'lines': [
+            '【取证清单】',
+            '伤停=未见',
+            '方向=锁主',
+            '星级=★★★★☆',
+        ],
+    }]
+    assert any('主菜质量层' in x['message'] for x in lint_quality_layer(ql_bad, day='2026-09-23'))
+    ql_cup_bare = [{
+        'header': '周二002 米尔顿vs克劳利｜英锦标赛',
+        'lines': [
+            '【取证清单】',
+            '【主菜质量层】',
+            '机会质量=缺',
+            '风格对位=缺',
+            '赛程·轮换=缺',
+            '比赛状态=缺',
+            '方向=主不败｜弱置信=是',
+        ],
+    }]
+    assert any('轮换' in x['message'] for x in lint_quality_layer(ql_cup_bare, day='2026-09-23'))
+    ql_ok = [{
+        'header': '周二002 米尔顿vs克劳利｜英锦标赛',
+        'lines': [
+            '【取证清单】',
+            '【主菜质量层】',
+            '机会质量=缺',
+            '风格对位=缺',
+            '赛程·轮换=缺｜杯赛轮换未核',
+            '比赛状态=缺',
+            '方向=主不败｜弱置信=是',
+            '星级=★★★☆☆',
+        ],
+    }]
+    assert lint_quality_layer(ql_ok, day='2026-09-23') == []
+    ql_lock_full_que = [{
+        'header': '周三001 A vs B',
+        'lines': [
+            '【取证清单】',
+            '【主菜质量层】',
+            '机会质量=缺',
+            '风格对位=缺',
+            '赛程·轮换=缺',
+            '比赛状态=缺',
+            '方向=锁主',
+            '星级=★★★★☆',
+        ],
+    }]
+    assert any('四槽全缺' in x['message'] for x in lint_quality_layer(ql_lock_full_que, day='2026-09-23'))
     # V17.4.50 交卷二分
     with tempfile.NamedTemporaryFile('w', suffix='.md', delete=False, encoding='utf-8') as tf:
         tf.write(
@@ -2123,11 +2271,11 @@ def _self_check() -> None:
         assert any('交卷模式' in x['message'] for x in w_mode)
     finally:
         os.unlink(bad_path)
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52: ok')
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.52 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.53 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
