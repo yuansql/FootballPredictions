@@ -12,7 +12,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
 7. lint_seasoning_pack — 佐料整包：可介入须见初盘+水位（4.32/4.50 类型诚实）
 8. lint_euro_deep_away — 欧战深盘客：欧战场锁客须见闸行（4.33）
 9. lint_dual_debut_lock — 双新军锁主：双新军叙事+锁主须见闸行（4.33）
-10. lint_summary_table — 全场汇总表：编号/排除/推方向/单子倾向/推比分/推进球（4.34）
+10. lint_summary_table — 全场汇总表：编号/排除/推方向/倾向/让球胜平负/比分/进球（4.34+4.57）
 11. lint_handicap_only_channel — 只开让球：未开售胜平负时映射禁写单买主胜等（4.36）
 12. lint_cold_upset_banner — 冷门预防统一亮牌：场场【冷门预防】触发=是|否（4.37）
 13. lint_hc_spf_single — 文末【让球稳健推荐】无|≤3（4.38；研究板可免 4.52）
@@ -23,6 +23,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
 18. lint_thin_intel_score — 薄情报/伤停未知研究板装满三格须弱置信（4.52）
 19. lint_quality_layer — 认真拆主菜质量层四槽；杯赛赛程须含轮换类词；全缺禁锁*满星（4.53）
 20. lint_cup_unveiling_accuracy — 杯赛揭幕：不败须豁免行；薄情报强制比分弃权（4.56）
+21. lint_must_gather_triple — 认真拆必采三件 WARN：伤停/机会代理/初盘（4.58）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
@@ -41,6 +42,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     EURO_DEEP_AWAY_DAY = "2026-09-18"
     DUAL_DEBUT_DAY = "2026-09-18"
     SUMMARY_TABLE_DAY = "2026-09-18"
+    SUMMARY_HC_COL_DAY = "2026-09-23"
     HC_ONLY_DAY = "2026-09-18"
     COLD_UPSET_DAY = "2026-09-20"
     HC_SPF_SINGLE_DAY = "2026-09-20"
@@ -52,6 +54,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     JUDGE_FIX_DAY = "2026-09-22"
     QUALITY_LAYER_DAY = "2026-09-23"
     ACCURACY_DAY = "2026-09-23"
+    MUST_GATHER_DAY = "2026-09-23"
 """
 
 import sys
@@ -70,7 +73,8 @@ EXCLUDE_INTEL_DAY = "2026-09-17"  # 排除三件套：硬情报/盘口质疑
 SEASONING_DAY = "2026-09-17"  # 佐料整包：初盘为锚
 EURO_DEEP_AWAY_DAY = "2026-09-18"  # 欧战深盘客闸 soft#8
 DUAL_DEBUT_DAY = "2026-09-18"  # 双新军锁主闸 soft#9
-SUMMARY_TABLE_DAY = "2026-09-18"  # 全场汇总表（排除/推方向/单子倾向/比分/进球）
+SUMMARY_TABLE_DAY = "2026-09-18"  # 全场汇总表（排除/推方向/倾向/比分/进球）
+SUMMARY_HC_COL_DAY = "2026-09-23"  # 汇总表必含让球胜平负列（4.57）
 HC_ONLY_DAY = "2026-09-18"  # 只开让球分通道（胜平负未开售）
 COLD_UPSET_DAY = "2026-09-20"  # 冷门预防统一亮牌
 HC_SPF_SINGLE_DAY = "2026-09-20"  # 让球稳健可荐文末块
@@ -82,6 +86,7 @@ FLOW_FIX_DAY = "2026-09-22"  # 流程消矛盾：深让竞彩现盘/冷门仅认
 JUDGE_FIX_DAY = "2026-09-22"  # 弱方向/假热闸/薄情报比分（4.52）
 QUALITY_LAYER_DAY = "2026-09-23"  # 主菜质量层四槽（4.53）
 ACCURACY_DAY = "2026-09-23"  # 准度/杯赛揭幕（4.56）
+MUST_GATHER_DAY = "2026-09-23"  # 认真拆必采三件 WARN（4.58）
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -364,9 +369,11 @@ def lint_lean_pack(sections: list[dict], day: str | None = None) -> list[dict]:
                 elif '平局' in line:
                     direction = '平局'
 
-                # 提取倾向（优先 02 格式，回退 01 格式）
-                # 02 格式: 倾向 主胜｜...（倾向前面不是"单子"）
-                m = re.search(r'(?<!单子)倾向\s*([^｜\|]+)', line)
+                # 提取倾向（优先 02 格式，回退 01 格式；V17.4.57 认 倾向=）
+                # 02/4.57: 倾向=主胜｜… 或 倾向 主胜｜…
+                m = re.search(r'(?<!单子)倾向\s*=\s*([^｜\|]+)', line)
+                if not m:
+                    m = re.search(r'(?<!单子)倾向\s+([^｜\|=]+)', line)
                 if not m:
                     # 01 格式: 单子倾向=主胜｜...
                     m = re.search(r'单子倾向\s*=\s*([^｜\|]+)', line)
@@ -1064,6 +1071,49 @@ def lint_cup_unveiling_accuracy(sections: list[dict], day: str | None = None) ->
     return warnings
 
 
+def lint_must_gather_triple(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.58：认真拆（含取证清单）须有【认真拆必采】且含伤停=、机会代理、初盘=。
+    仅 WARN，不挡交卷（少改闸）。
+    """
+    if day and day < MUST_GATHER_DAY:
+        return []
+
+    warnings = []
+    banner = re.compile(r'【认真拆必采】')
+    injury = re.compile(r'伤停\s*=\s*(有源|未见|槽弱)')
+    opp = re.compile(r'机会代理\s*=')
+    open_line = re.compile(r'初盘\s*=\s*(真开盘|竞彩现盘|缺)')
+
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        if not re.search(r'###?\s*取证清单|【取证清单】', blob):
+            continue
+        if banner.search(blob) and injury.search(blob) and opp.search(blob) and open_line.search(blob):
+            continue
+        missing = []
+        if not banner.search(blob):
+            missing.append('【认真拆必采】行')
+        else:
+            if not injury.search(blob):
+                missing.append('伤停=有源|未见|槽弱')
+            if not opp.search(blob):
+                missing.append('机会代理=')
+            if not open_line.search(blob):
+                missing.append('初盘=真开盘|竞彩现盘|缺')
+        warnings.append({
+            'rule': 'lint_must_gather_triple',
+            'severity': 'WARN',
+            'match': header,
+            'message': (
+                '认真拆缺必采三件：' + '、'.join(missing) +
+                '（V17.4.58；WARN only，补采抬准）'
+            ),
+        })
+    return warnings
+
+
 def lint_deep_lock_receipt(sections: list[dict], day: str | None = None) -> list[dict]:
     """
     V17.4.40/4.51：触深让/深热警示且方向=锁* 时，须【深让可锁】。
@@ -1560,8 +1610,9 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
 
 def lint_summary_table(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
     """
-    V17.4.34：认真拆 ≥1 场时，全文须有固定列表头的全场汇总表。
-    必含列：编号、对阵、排除、推方向、单子倾向、推比分（或主/次/防）、推进球（或进球）。
+    V17.4.34 + V17.4.57：认真拆 ≥1 场时，全文须有固定列表头的全场汇总表。
+    必含列：编号、对阵、排除、推方向、倾向（或单子倾向）、比分（或推比分/主次防）、进球（或推进球）。
+    ≥ SUMMARY_HC_COL_DAY：另须「让球胜平负」列。
     """
     if day and day < SUMMARY_TABLE_DAY:
         return []
@@ -1583,17 +1634,43 @@ def lint_summary_table(sections: list[dict], day: str | None = None, filepath: s
         }]
 
     warnings = []
-    # Markdown 表头一行内同时出现关键列名
+    # 倾向｜单子倾向；比分｜推比分｜主/次/防；进球｜推进球
+    lean_col = r'(倾向|单子倾向)'
+    score_col = r'(比分|推比分|主\s*/\s*次\s*/\s*防)'
+    goals_col = r'(进球|推进球)'
     header_ok = bool(re.search(
-        r'\|\s*编号\s*\|[^\n]*对阵[^\n]*排除[^\n]*推方向[^\n]*单子倾向[^\n]*(推比分|主\s*/\s*次\s*/\s*防)[^\n]*(推进球|进球)',
+        rf'\|\s*编号\s*\|[^\n]*对阵[^\n]*排除[^\n]*推方向[^\n]*{lean_col}[^\n]*{score_col}[^\n]*{goals_col}',
         content,
     ))
-    # 兼容无管道、空格分隔声明
+    # 兼容无管道、空格分隔声明（旧稿）
     if not header_ok:
         header_ok = bool(re.search(
-            r'编号\s+对阵\s+排除\s+推方向\s+单子倾向\s+推比分',
+            rf'编号\s+对阵\s+排除\s+推方向\s+{lean_col}\s+{score_col}',
             content,
-        )) and ('推进球' in content or '进球' in content)
+        )) and bool(re.search(goals_col, content))
+
+    # V17.4.57：新列可插在倾向与比分之间，或表头任意位置出现「让球胜平负」
+    need_hc = (not day) or (day >= SUMMARY_HC_COL_DAY)
+    if header_ok and need_hc:
+        # 更严：编号…推方向…倾向…让球胜平负…比分…进球
+        hc_ok = bool(re.search(
+            rf'\|\s*编号\s*\|[^\n]*对阵[^\n]*排除[^\n]*推方向[^\n]*{lean_col}[^\n]*让球胜平负[^\n]*{score_col}[^\n]*{goals_col}',
+            content,
+        )) or bool(re.search(
+            rf'编号\s+对阵\s+排除\s+推方向\s+{lean_col}\s+让球胜平负\s+{score_col}',
+            content,
+        ))
+        if not hc_ok:
+            warnings.append({
+                'rule': 'lint_summary_table',
+                'severity': 'ERROR',
+                'match': '全文',
+                'message': (
+                    '缺【全场汇总表】让球列：编号|对阵|排除|推方向|倾向|让球胜平负|比分|进球 '
+                    '(V17.4.57；SUMMARY_HC_COL_DAY=2026-09-23)'
+                ),
+            })
+            return warnings
 
     if not header_ok:
         warnings.append({
@@ -1601,8 +1678,8 @@ def lint_summary_table(sections: list[dict], day: str | None = None, filepath: s
             'severity': 'ERROR',
             'match': '全文',
             'message': (
-                '缺【全场汇总表】固定列：编号|对阵|排除|推方向|单子倾向|推比分（主/次/防）|推进球 '
-                '(V17.4.34；须在 TOP/二串一之前)'
+                '缺【全场汇总表】固定列：编号|对阵|排除|推方向|倾向|让球胜平负|比分|进球 '
+                '(V17.4.34/4.57；须在 TOP/二串一之前；旧列名单子倾向/推比分/推进球仍认)'
             ),
         })
         return warnings
@@ -1724,7 +1801,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     sections = parse_sections(filepath)
     print(f"解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -1843,6 +1920,15 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_cup_unveiling_accuracy] ✓ 通过")
+
+        w_mg = lint_must_gather_triple(sections, day)
+        all_warnings.extend(w_mg)
+        if w_mg:
+            print(f"\n[lint_must_gather_triple] 发现 {len(w_mg)} 个问题:")
+            for item in w_mg:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_must_gather_triple] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)
@@ -2375,11 +2461,77 @@ def _self_check() -> None:
     }]
     assert lint_cup_unveiling_accuracy(cup_ok, day='2026-09-23') == []
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56: ok')
+    # V17.4.57 汇总表让球列
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+        tf.write(
+            '交卷模式=研究板\n'
+            '## 周三002 日 vs 泰\n'
+            '### 取证清单\n'
+            '排除=客胜｜方向=锁主｜单子倾向=主胜\n'
+            '【全场汇总表】\n'
+            '| 编号 | 对阵 | 排除 | 推方向 | 单子倾向 | 推比分（主/次/防） | 推进球 |\n'
+            '|------|------|------|--------|----------|-------------------|--------|\n'
+            '| 周三002 | 日 vs 泰 | 客胜 | 锁主 | 主胜 | 3-0 / 2-0 / 4-0 | 2-4 |\n'
+        )
+        old_path = tf.name
+    try:
+        w_old = lint_summary_table(
+            [{'header': '周三002 日 vs 泰', 'lines': ['排除=客胜', '方向=锁主']}],
+            day='2026-09-23',
+            filepath=old_path,
+        )
+        assert any('让球' in x['message'] for x in w_old), w_old
+        assert lint_summary_table(
+            [{'header': '周三002 日 vs 泰', 'lines': ['排除=客胜', '方向=锁主']}],
+            day='2026-09-22',
+            filepath=old_path,
+        ) == []
+    finally:
+        os.unlink(old_path)
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+        tf.write(
+            '交卷模式=研究板\n'
+            '## 周三002 日 vs 泰\n'
+            '### 取证清单\n'
+            '排除=客胜｜方向=锁主｜单子倾向=主胜\n'
+            '【全场汇总表】\n'
+            '| 编号 | 对阵 | 排除 | 推方向 | 倾向 | 让球胜平负 | 比分 | 进球 |\n'
+            '|------|------|------|--------|------|------------|------|------|\n'
+            '| 周三002 | 日 vs 泰 | 客胜 | 锁主 | 主胜 | 让球主胜(主-2) | 3-0 / 2-0 / 4-0 | 2-4 |\n'
+        )
+        new_path = tf.name
+    try:
+        assert lint_summary_table(
+            [{'header': '周三002 日 vs 泰', 'lines': ['排除=客胜', '方向=锁主']}],
+            day='2026-09-23',
+            filepath=new_path,
+        ) == []
+    finally:
+        os.unlink(new_path)
+
+
+    # V17.4.58 必采三件 WARN
+    mg_bad = [{
+        'header': '周三002 日 vs 泰',
+        'lines': ['### 取证清单', '排除=客胜', '方向=锁主', '初盘=竞彩现盘'],
+    }]
+    assert any('必采' in x['message'] for x in lint_must_gather_triple(mg_bad, day='2026-09-23'))
+    mg_ok = [{
+        'header': '周三002 日 vs 泰',
+        'lines': [
+            '### 取证清单',
+            '【认真拆必采】伤停=有源｜机会代理=已查雷速无｜初盘=竞彩现盘',
+            '方向=锁主',
+        ],
+    }]
+    assert lint_must_gather_triple(mg_ok, day='2026-09-23') == []
+
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + gather58: ok')
+
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.56 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.58 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')

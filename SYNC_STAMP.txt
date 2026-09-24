@@ -1,4 +1,20 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-09-23 20:17:07
+version_note: V17.4.60 雷速全页签必扫（积分/进球分布/走势/赛程/半全场/伤停/前瞻；禁只采伤停）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-23 20:00:35
+version_note: V17.4.59 双源分工取证（捷报近况/交锋/三合一；雷速伤停下滑+赛程/前瞻；禁空表=无数据）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-23 14:35:15
+version_note: V17.4.58 认真拆必采三件（伤停+机会代理+初盘；lint WARN only）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-23 14:21:12
+version_note: V17.4.57 汇总表让球列（编号|对阵|排除|推方向|倾向|让球胜平负|比分|进球；lint SUMMARY_HC_COL_DAY）
+
+# football-predict-v17 sync stamp
 synced_at: 2026-09-23 11:56:53
 version_note: V17.4.56 准度优先（北极星=方向+比分命中；杯赛揭幕豁免闸；揭幕+薄情报强制比分弃权；lint_cup_unveiling_accuracy）
 
