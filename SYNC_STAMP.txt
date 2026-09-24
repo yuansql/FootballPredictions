@@ -1,4 +1,24 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-09-24 17:00:27
+version_note: V17.4.65 只推8+2+2或8+4；4元博可复式；博=比分/进球/半全场
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-24 16:46:54
+version_note: V17.4.64 博优先比分/进球/半全场（禁弱让球二串冒充博）；12分买例仍8+4｜8+2+2｜10+2
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-24 16:40:13
+version_note: V17.4.63 默认12元分买合法例=8+4｜8+2+2｜10+2（稳多博少；禁默认6+6）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-24 16:32:51
+version_note: V17.4.62 默认票面12元两张二串一（稳8+博4｜合理分买稳≥博；禁默认6+6）
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-24 16:30:22
+version_note: V17.4.61 默认票面12元两张二串一（稳6+博6）；写单关前核体彩仅显示单关
+
+# football-predict-v17 sync stamp
 synced_at: 2026-09-23 20:17:07
 version_note: V17.4.60 雷速全页签必扫（积分/进球分布/走势/赛程/半全场/伤停/前瞻；禁只采伤停）
 
