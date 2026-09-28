@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-09-28 18:55:00
+version_note: V17.4.66 lint 清理：删除重复定义的 lint_must_gather_triple（两份逐字相同，后者覆盖前者）；34 份 01 稿 lint 输出逐字节一致
+
+# football-predict-v17 sync stamp
 synced_at: 2026-09-28 11:50:00
 version_note: V17.4.66 lint 修：【杯赛揭幕闸】认「触发=否｜理由=非空」放行（与 output-template 对齐；理由=无仍拦）；09-18~09-28 共13稿 lint 输出逐字节一致
 

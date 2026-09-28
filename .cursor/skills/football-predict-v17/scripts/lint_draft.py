@@ -1610,49 +1610,6 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
     return warnings
 
 
-def lint_must_gather_triple(sections: list[dict], day: str | None = None) -> list[dict]:
-    """
-    V17.4.58：认真拆（含取证清单）须有【认真拆必采】且含伤停=、机会代理、初盘=。
-    仅 WARN，不挡交卷（少改闸）。
-    """
-    if day and day < MUST_GATHER_DAY:
-        return []
-
-    warnings = []
-    banner = re.compile(r'【认真拆必采】')
-    injury = re.compile(r'伤停\s*=\s*(有源|未见|槽弱)')
-    opp = re.compile(r'机会代理\s*=')
-    open_line = re.compile(r'初盘\s*=\s*(真开盘|竞彩现盘|缺)')
-
-    for sec in sections:
-        header = sec['header']
-        blob = '\n'.join(sec['lines'])
-        if not re.search(r'###?\s*取证清单|【取证清单】', blob):
-            continue
-        if banner.search(blob) and injury.search(blob) and opp.search(blob) and open_line.search(blob):
-            continue
-        missing = []
-        if not banner.search(blob):
-            missing.append('【认真拆必采】行')
-        else:
-            if not injury.search(blob):
-                missing.append('伤停=有源|未见|槽弱')
-            if not opp.search(blob):
-                missing.append('机会代理=')
-            if not open_line.search(blob):
-                missing.append('初盘=真开盘|竞彩现盘|缺')
-        warnings.append({
-            'rule': 'lint_must_gather_triple',
-            'severity': 'WARN',
-            'match': header,
-            'message': (
-                '认真拆缺必采三件：' + '、'.join(missing) +
-                '（V17.4.58；WARN only，补采抬准）'
-            ),
-        })
-    return warnings
-
-
 def lint_summary_table(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
     """
     V17.4.34 + V17.4.57：认真拆 ≥1 场时，全文须有固定列表头的全场汇总表。
