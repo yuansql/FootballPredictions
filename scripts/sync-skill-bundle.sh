@@ -49,10 +49,8 @@ for f in "${FILES[@]}"; do
   cp "$src" "$REF/$f"
 done
 
-# keep non-txt templates that already live in package refs (e.g. 03)
-if [[ -f "$ROOT/references/03-复盘模板.md" ]]; then
-  cp "$ROOT/references/03-复盘模板.md" "$REF/03-复盘模板.md"
-fi
+# md references (03 模板 + 专闸详表/复盘条款/取证速查)
+cp "$ROOT"/references/*.md "$REF/"
 
 cp "$ROOT/rules/V15.6_patches.py" "$REF/rules/"
 cp "$ROOT/rules/V15.6_patches.txt" "$REF/rules/"

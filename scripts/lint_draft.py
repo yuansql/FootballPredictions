@@ -26,7 +26,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
 21. lint_must_gather_triple — 认真拆必采三件 WARN：伤停/机会代理/初盘（4.58）
 
 用法：
-    python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]
+    python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]   # 不传 --day：取路径中日期，无则今天
     python3 lint_draft.py /path/to/01-竞彩分析.md --day 2026-09-07
     python3 lint_draft.py --self-check
 
@@ -1046,6 +1046,8 @@ def lint_cup_unveiling_accuracy(sections: list[dict], day: str | None = None) ->
         is_unveil = bool(unveil.search(header) or unveil.search(blob))
         if not (is_cup and is_unveil):
             continue
+        if re.search(r'【杯赛揭幕闸】\s*触发\s*=\s*否\s*[|｜]\s*理由\s*=\s*(?!无\b)[^\s|｜]', blob):
+            continue
         if undefeated.search(blob):
             # 观望场若同时残留「主不败」词也拦——须闸
             if not (gate.search(blob) and exempt_ok.search(blob) and not re.search(r'豁免\s*=\s*无\b', blob)):
@@ -1842,8 +1844,11 @@ def lint_direction_score_consistency(sections: list[dict], day: str | None = Non
 
 def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
+    if day is None:
+        m = re.search(r'\d{4}-\d{2}-\d{2}', filepath)
+        day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
-    print(f"解析到 {len(sections)} 场比赛段")
+    print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
     print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}")
     print("-" * 60)
 
@@ -2503,6 +2508,14 @@ def _self_check() -> None:
         ],
     }]
     assert lint_cup_unveiling_accuracy(cup_ok, day='2026-09-23') == []
+    cup_no = [{'header': '周一005 比利时 vs 法国｜欧国联', 'lines': [
+        '【取证清单】', '交锋=欧洲杯 1-0', '比赛状态=新帅首秀', '方向=客不败',
+    ]}]
+    assert lint_cup_unveiling_accuracy(cup_no, day='2026-09-28')
+    cup_no[0]['lines'].append('【杯赛揭幕闸】触发=否｜理由=欧国联第2轮')
+    assert lint_cup_unveiling_accuracy(cup_no, day='2026-09-28') == []
+    cup_no[0]['lines'][-1] = '【杯赛揭幕闸】触发=否｜理由=无'
+    assert lint_cup_unveiling_accuracy(cup_no, day='2026-09-28')
 
     # V17.4.57 汇总表让球列
     with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
@@ -2552,7 +2565,17 @@ def _self_check() -> None:
     finally:
         os.unlink(new_path)
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57: ok')
+    import contextlib, io, tempfile as _tf
+    with _tf.TemporaryDirectory() as td:
+        p = os.path.join(td, '2026-09-24', '01.md')
+        os.makedirs(os.path.dirname(p))
+        with open(p, 'w', encoding='utf-8') as f:
+            f.write('## 周四002 韩国 vs 厄瓜多尔｜骨架\n排除=暂缓｜理由=情报档偏薄\n方向=客不败\n')
+        with contextlib.redirect_stdout(io.StringIO()):
+            items = run_lint(p)['items']
+    assert not [i for i in items if i['rule'] == 'lint_cold_upset_banner'], 'day 须从路径推断，骨架免冷门预防'
+
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no: ok')
 
 
 if __name__ == "__main__":

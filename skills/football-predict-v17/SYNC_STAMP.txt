@@ -1,4 +1,16 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-09-28 11:50:00
+version_note: V17.4.66 lint 修：【杯赛揭幕闸】认「触发=否｜理由=非空」放行（与 output-template 对齐；理由=无仍拦）；09-18~09-28 共13稿 lint 输出逐字节一致
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-28 11:00:00
+version_note: V17.4.66 lint 修：未传 --day 时从路径取稿日（原 None 致骨架场误报【冷门预防】等）；旧+--day 与新版 7 天稿结果一致
+
+# football-predict-v17 sync stamp
+synced_at: 2026-09-28 10:50:00
+version_note: V17.4.66 瘦身：SKILL 1314→~325 行；专闸/取证/复盘细则移 references/；删版本流水与已废条款；规则不变
+
+# football-predict-v17 sync stamp
 synced_at: 2026-09-24 17:00:27
 version_note: V17.4.65 只推8+2+2或8+4；4元博可复式；博=比分/进球/半全场
 
