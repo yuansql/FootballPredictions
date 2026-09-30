@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-09-30 11:20:17
+version_note: V17.4.67 活络默认：假热不锁≠倾向不定；让脏钉让平；偏薄补采/分诊弃锁；二次倾斜须锁*；博须尖；权重印象可选；票面候选升认真拆。SKILL+防偷懒+output-template；lint 未改。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-09-28 18:55:00
 version_note: V17.4.66 lint 清理：删除重复定义的 lint_must_gather_triple（两份逐字相同，后者覆盖前者）；34 份 01 稿 lint 输出逐字节一致
 
