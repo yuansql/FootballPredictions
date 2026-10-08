@@ -1,6 +1,6 @@
 # football-predict-v17 sync stamp
 synced_at: 2026-10-08 10:01:47
-version_note: V17.4.68 强制列真实准确率账：汇总表加「强制」列(单选/三格比分 a/b/c, 禁不定/弃权, 比分非弃权须=篮同序, 只记账不进票面)；复盘报出手率+强制全量+买热门；lint _lint_forced_col (≥2026-10-08)；SKILL+output-template+防偷懒+复盘条款+03模板；toutiao/scores/pred_accuracy.py 加出手率。
+version_note: V17.4.68 强制列真实准确率账：汇总表加「强制」列(单选/三格比分 a/b/c, 禁不定/弃权, 比分非弃权须=篮同序, 只记账不进票面)；复盘报出手率+强制全量+买热门；lint _lint_forced_col (≥2026-10-08)；SKILL+output-template+防偷懒+复盘条款+03模板；toutiao/scores/pred_accuracy.py 加出手率；复盘条款加进化闸(同类miss≥3+账本≥30+回测升才改)。
 
 # football-predict-v17 sync stamp
 synced_at: 2026-09-30 11:20:17
