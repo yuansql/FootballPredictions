@@ -75,6 +75,7 @@ EURO_DEEP_AWAY_DAY = "2026-09-18"  # 欧战深盘客闸 soft#8
 DUAL_DEBUT_DAY = "2026-09-18"  # 双新军锁主闸 soft#9
 SUMMARY_TABLE_DAY = "2026-09-18"  # 全场汇总表（排除/推方向/倾向/比分/进球）
 SUMMARY_HC_COL_DAY = "2026-09-23"  # 汇总表必含让球胜平负列（4.57）
+SUMMARY_FORCED_COL_DAY = "2026-10-08"  # 汇总表必含强制列 单选/a/b/c（4.68）
 HC_ONLY_DAY = "2026-09-18"  # 只开让球分通道（胜平负未开售）
 COLD_UPSET_DAY = "2026-09-20"  # 冷门预防统一亮牌
 HC_SPF_SINGLE_DAY = "2026-09-20"  # 让球稳健可荐文末块
@@ -1686,6 +1687,11 @@ def lint_summary_table(sections: list[dict], day: str | None = None, filepath: s
         })
         return warnings
 
+    if (not day) or (day >= SUMMARY_FORCED_COL_DAY):
+        warnings += _lint_forced_col(content)
+        if any(w['severity'] == 'ERROR' for w in warnings):
+            return warnings
+
     # 粗检：表体行数（以 | 周四/周一… 或纯编号行）不少于认真拆场数的一半（防空表）
     body_rows = len(re.findall(r'\|\s*(周[一二三四五六日]\d{3}|\d{3})\s*\|', content))
     if body_rows < max(1, len(sections) // 2):
@@ -1696,6 +1702,44 @@ def lint_summary_table(sections: list[dict], day: str | None = None, filepath: s
             'message': f'汇总表数据行偏少（约{body_rows}行 vs 解析{len(sections)}场），请核对是否场场入表',
         })
     return warnings
+
+
+def _lint_forced_col(content: str) -> list[dict]:
+    """V17.4.68：汇总表「强制」列每行 单选/a/b/c；倾向≠不定须一致；比分非弃权须=比分篮（同序）。"""
+    def err(match, msg):
+        return {'rule': 'lint_summary_table', 'severity': 'ERROR', 'match': match, 'message': msg + '（V17.4.68）'}
+
+    lines = content.splitlines()
+    hdr_i = next((i for i, l in enumerate(lines)
+                  if re.match(r'\s*\|\s*编号\s*\|', l) and '让球胜平负' in l), None)
+    if hdr_i is None:
+        return []
+    cols = [c.strip() for c in lines[hdr_i].strip().strip('|').split('|')]
+    if '强制' not in cols:
+        return [err('全文', '缺【全场汇总表】强制列：…|进球|强制（每场 单选/a/b/c，禁不定/弃权）')]
+    ci, li, si = cols.index('强制'), next(i for i, c in enumerate(cols) if '倾向' in c), \
+        next(i for i, c in enumerate(cols) if re.match(r'(比分|推比分|主\s*/\s*次\s*/\s*防)', c))
+    out = []
+    for l in lines[hdr_i + 2:]:
+        if not l.strip().startswith('|'):
+            break
+        cells = [c.strip() for c in l.strip().strip('|').split('|')]
+        if len(cells) <= ci:
+            out.append(err(cells[0], '汇总表行缺强制列'))
+            continue
+        m = re.fullmatch(r'(主胜|平|客胜)((?:\s*/\s*\d+-\d+){3})', cells[ci])
+        forced = re.findall(r'\d+-\d+', m.group(2)) if m else []
+        if not m or len(set(forced)) != 3:
+            out.append(err(cells[0], f"强制列非法 '{cells[ci]}'（须 主胜|平|客胜/a/b/c 三格不重复，禁不定/弃权）"))
+            continue
+        lean = cells[li]
+        if lean in ('主胜', '平', '客胜') and lean != m.group(1):
+            out.append(err(cells[0], f'强制单选 {m.group(1)} ≠ 倾向 {lean}'))
+        if '弃权' not in cells[si]:
+            pack = re.findall(r'\d+-\d+', cells[si])
+            if pack and pack != forced:
+                out.append(err(cells[0], f"强制三格 {'/'.join(forced)} ≠ 比分篮 {'/'.join(pack)}"))
+    return out
 
 
 def infer_winner_from_score(score: str) -> str | None:
@@ -2521,6 +2565,37 @@ def _self_check() -> None:
         ) == []
     finally:
         os.unlink(new_path)
+
+    # V17.4.68 强制列
+    hdr = ('| 编号 | 对阵 | 排除 | 推方向 | 倾向 | 让球胜平负 | 比分 | 进球 | 强制 |\n'
+           '|---|---|---|---|---|---|---|---|---|\n')
+    sec = [{'header': '周三002 日 vs 泰', 'lines': ['排除=客胜', '方向=锁主']}]
+    for row, ok in [
+        ('| 周三002 | 日 vs 泰 | 客胜 | 锁主 | 主胜 | 让球主胜(主-2) | 3-0 / 2-0 / 4-0 | 2-4 | 主胜/3-0/2-0/4-0 |', True),
+        ('| 周三002 | 日 vs 泰 | 客胜 | 主不败 | 不定 | 不定 | 比分弃权 | 1-3 | 平/1-1/1-0/0-0 |', True),
+        ('| 周三002 | 日 vs 泰 | 客胜 | 主不败 | 不定 | 不定 | 比分弃权 | 1-3 | 平/1-1 |', False),
+        ('| 周三002 | 日 vs 泰 | 客胜 | 主不败 | 不定 | 不定 | 比分弃权 | 1-3 | 平/1-1/1-1/0-0 |', False),
+        ('| 周三002 | 日 vs 泰 | 客胜 | 主不败 | 不定 | 不定 | 比分弃权 | 1-3 | 不定/弃权 |', False),
+        ('| 周三002 | 日 vs 泰 | 客胜 | 锁主 | 主胜 | 让球主胜(主-2) | 3-0 / 2-0 / 4-0 | 2-4 | 平/3-0/2-0/4-0 |', False),
+        ('| 周三002 | 日 vs 泰 | 客胜 | 锁主 | 主胜 | 让球主胜(主-2) | 3-0 / 2-0 / 4-0 | 2-4 | 主胜/2-0/3-0/4-0 |', False),
+    ]:
+        with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+            tf.write('【全场汇总表】\n' + hdr + row + '\n')
+            fp = tf.name
+        try:
+            errs = [x for x in lint_summary_table(sec, day='2026-10-08', filepath=fp) if x['severity'] == 'ERROR']
+            assert (not errs) == ok, (row, errs)
+        finally:
+            os.unlink(fp)
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+        tf.write('【全场汇总表】\n| 编号 | 对阵 | 排除 | 推方向 | 倾向 | 让球胜平负 | 比分 | 进球 |\n|---|---|---|---|---|---|---|---|\n'
+                 '| 周三002 | 日 vs 泰 | 客胜 | 锁主 | 主胜 | 让球主胜(主-2) | 3-0 | 2-4 |\n')
+        fp = tf.name
+    try:
+        assert any('强制列' in x['message'] for x in lint_summary_table(sec, day='2026-10-08', filepath=fp))
+        assert lint_summary_table(sec, day='2026-10-07', filepath=fp) == []
+    finally:
+        os.unlink(fp)
 
     import contextlib, io, tempfile as _tf
     with _tf.TemporaryDirectory() as td:
