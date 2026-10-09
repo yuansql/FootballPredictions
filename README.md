@@ -76,7 +76,7 @@ FootballPredictions/
 
 ```bash
 bash scripts/sync-skill-bundle.sh
-python3 scripts/lint_draft.py <日夹|01|03> --warn-only
+python3 scripts/lint_draft.py <日夹>/01-竞彩分析.md
 ```
 
 `README.md` 与 `使用.md` **不在** sync 脚本里，改版本号时要手改这两份。
