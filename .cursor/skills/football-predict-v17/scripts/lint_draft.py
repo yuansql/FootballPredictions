@@ -55,6 +55,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     QUALITY_LAYER_DAY = "2026-09-23"
     ACCURACY_DAY = "2026-09-23"
     MUST_GATHER_DAY = "2026-09-23"
+    INTEL_DIR_DAY = "2026-10-12"
 """
 
 import sys
@@ -88,6 +89,7 @@ JUDGE_FIX_DAY = "2026-09-22"  # 弱方向/假热闸/薄情报比分（4.52）
 QUALITY_LAYER_DAY = "2026-09-23"  # 主菜质量层四槽（4.53）
 ACCURACY_DAY = "2026-09-23"  # 准度/杯赛揭幕（4.56）
 MUST_GATHER_DAY = "2026-09-23"  # 认真拆必采三件 WARN（4.58）
+INTEL_DIR_DAY = "2026-10-12"  # V17.4.69：排胜负边必须硬情报词（质疑不得单独过闸）
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
 STATE_CRUSH_DAY = "2026-09-16" # 状态碾压冷门预警从这天起检查
@@ -580,10 +582,12 @@ def lint_exclude_intel_gate(sections: list[dict], day: str | None = None) -> lis
     V17.4.31 排除三件套：排除=主胜/客胜 时，理由须含硬情报词，或质疑=含盘口词。
     禁止仅软词（主场优势/经验/名气/抵消…）排胜负边。排除=平 不强制硬词。
     V17.4.47：排除=暂缓 跳过硬词闸（理由须非空：ICS低|揭幕|槽不足）。
+    V17.4.69（≥INTEL_DIR_DAY）：排胜负边必须硬情报词；质疑/盘口不得单独过闸。
     """
     if day and day < EXCLUDE_INTEL_DAY:
         return []
 
+    hard_only = (not day) or day >= INTEL_DIR_DAY
     warnings = []
     for sec in sections:
         header = sec['header']
@@ -635,19 +639,33 @@ def lint_exclude_intel_gate(sections: list[dict], day: str | None = None) -> lis
             challenge_ok = bool(EXCLUDE_MARKET_RE.search(challenge)) or has_market
 
         soft_hit = bool(EXCLUDE_SOFT_ONLY_RE.search(reason))
-        if soft_hit and not has_hard and not challenge_ok:
+        if soft_hit and not has_hard:
+            if hard_only or not challenge_ok:
+                warnings.append({
+                    'rule': 'lint_exclude_intel_gate',
+                    'severity': 'ERROR',
+                    'match': header,
+                    'message': (
+                        f'排除={exclude} 理由「{reason}」像软词排胜负边；'
+                        f'须硬情报（伤停/轮换/状态/战意/连败/克制/板凳…）'
+                        + (' (V17.4.69 情报定方向)' if hard_only else '或质疑=盘口词 (V17.4.31)')
+                    ),
+                })
+                continue
+
+        if hard_only and not has_hard:
             warnings.append({
                 'rule': 'lint_exclude_intel_gate',
                 'severity': 'ERROR',
                 'match': header,
                 'message': (
-                    f'排除={exclude} 理由「{reason}」像软词排胜负边；'
-                    f'须硬情报（伤停/轮换/状态/战意/连败/克制/板凳…）或质疑=盘口词 (V17.4.31)'
+                    f'排除={exclude} 缺硬情报词；质疑/盘口不得单独定排除，'
+                    f'SP 不得定方向 (V17.4.69 情报定方向)'
                 ),
             })
             continue
 
-        if not has_hard and not challenge_ok:
+        if not hard_only and not has_hard and not challenge_ok:
             warnings.append({
                 'rule': 'lint_exclude_intel_gate',
                 'severity': 'ERROR',
