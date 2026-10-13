@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-13 10:20:00
+version_note: V17.4.71 先选场（亲爱的点名）：下注单文首【票面候选】≤3→认真拆=候选→票腿⊆候选；禁先铺全表再凑票；分诊弃锁不得把骨架塞进稳/博。lint CANDIDATE_FIRST_DAY=2026-10-13。SKILL+output-template+防偷懒。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-13 09:50:00
 version_note: V17.4.70 默认票面16元8+4+2+2（亲爱的点名）：稳=让球胜负或锁*单选（禁不败倾向拧稳、禁胜+平/负+平复式）；博4=进球双选×胜平负单选（中出档乘积≥4）；大博+机动各2（无尖腿机动可空）；16是上限禁10+4+2加厚稳；点名12元仍8+4|8+2+2。lint TICKET16_DAY=2026-10-13。SKILL+output-template+防偷懒。
 

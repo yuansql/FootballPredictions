@@ -49,6 +49,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     DEEP_LOCK_DAY = "2026-09-22"
     TICKET_DAY = "2026-09-22"
     TICKET16_DAY = "2026-10-13"
+    CANDIDATE_FIRST_DAY = "2026-10-13"
     LINEUP_GATE_DAY = "2026-09-22"
     DELIVERY_DAY = "2026-09-22"
     FLOW_FIX_DAY = "2026-09-22"
@@ -84,6 +85,7 @@ HC_SPF_SINGLE_DAY = "2026-09-20"  # 让球稳健可荐文末块
 DEEP_LOCK_DAY = "2026-09-22"  # 深让+锁*须【深让可锁】收据
 TICKET_DAY = "2026-09-22"  # 【今日票面】主交卷（4.41）
 TICKET16_DAY = "2026-10-13"  # V17.4.70：16元8+4+2+2；禁不败拧稳；禁胜+平复式
+CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 LINEUP_GATE_DAY = "2026-09-22"  # 票面非空仓须【临场闸】（4.47）
 DELIVERY_DAY = "2026-09-22"  # 交卷模式/初盘类型/认真拆≤3/伤停未知（4.50）
 FLOW_FIX_DAY = "2026-09-22"  # 流程消矛盾：深让竞彩现盘/冷门仅认真拆（4.51）
@@ -1557,6 +1559,64 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
             'message': '【今日票面】须含 预算=（默认16元；V17.4.70）',
         })
     empty = bool(re.search(r'方案\s*=\s*空仓|空仓', body))
+    # V17.4.71：先选【票面候选】（空仓日也要有；日闸 2026-10-13）
+    if not (day and day < CANDIDATE_FIRST_DAY):
+        cand_m = re.search(r'【票面候选】([^\n]*)', content)
+        if not cand_m:
+            warnings.append({
+                'rule': 'lint_today_ticket',
+                'severity': 'ERROR',
+                'match': filepath,
+                'message': '须有【票面候选】行（先选场再认真拆；V17.4.71）',
+            })
+        else:
+            cand_line = cand_m.group(1)
+            cand_empty = bool(re.search(r'无|候选空', cand_line))
+            candidates = set(re.findall(r'(?<!\d)(\d{3})(?!\d)', cand_line))
+            if not cand_empty and not candidates:
+                warnings.append({
+                    'rule': 'lint_today_ticket',
+                    'severity': 'ERROR',
+                    'match': filepath,
+                    'message': '【票面候选】须含三位场次编号或写无｜研究板（V17.4.71）',
+                })
+            if len(candidates) > 3:
+                warnings.append({
+                    'rule': 'lint_today_ticket',
+                    'severity': 'ERROR',
+                    'match': filepath,
+                    'message': '【票面候选】最多3场（V17.4.71）',
+                })
+            deep_m = re.search(r'认真拆\s*=\s*([^\n]+)', content)
+            if deep_m and candidates:
+                deep_blob = deep_m.group(1)
+                if not re.search(r'票面候选', deep_blob):
+                    deep_nums = set(re.findall(r'(?<!\d)(\d{3})(?!\d)', deep_blob))
+                    if deep_nums and deep_nums != candidates:
+                        warnings.append({
+                            'rule': 'lint_today_ticket',
+                            'severity': 'ERROR',
+                            'match': filepath,
+                            'message': '认真拆须=票面候选（或写认真拆=票面候选；V17.4.71）',
+                        })
+            if not empty and candidates:
+                ticket_nums = set()
+                for tm in re.finditer(
+                    r'(?:稳|博|大博|机动)\s*=[^\n]+', body
+                ):
+                    ticket_nums |= set(
+                        re.findall(r'(?<!\d)(\d{3})(?!\d)', tm.group(0))
+                    )
+                outside = sorted(ticket_nums - candidates)
+                if outside:
+                    warnings.append({
+                        'rule': 'lint_today_ticket',
+                        'severity': 'ERROR',
+                        'match': filepath,
+                        'message': (
+                            f'票腿场次{outside}不在【票面候选】内（V17.4.71）'
+                        ),
+                    })
     if empty:
         return warnings
     # 非空仓：方案= 或 形态=一张/两张 或 稳=
@@ -1908,7 +1968,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
     print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}")
     print("-" * 60)
 
     all_warnings = []
