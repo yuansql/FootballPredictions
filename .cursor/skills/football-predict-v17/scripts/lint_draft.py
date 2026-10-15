@@ -1058,7 +1058,7 @@ def lint_cup_unveiling_accuracy(sections: list[dict], day: str | None = None) ->
         r'\d\s*[-:]\s*\d\s*/\s*\d\s*[-:]\s*\d\s*/\s*\d\s*[-:]\s*\d'
     )
     exempt_ok = re.compile(
-        r'豁免\s*=\s*(雷速|名单|伤停有源|非联赛|硬情报|[^\n无][^\n]{2,})'
+        r'豁免\s*=\s*(捷报|雷速|名单|伤停有源|非联赛|硬情报|[^\n无][^\n]{2,})'
     )
 
     warnings = []
@@ -1081,7 +1081,7 @@ def lint_cup_unveiling_accuracy(sections: list[dict], day: str | None = None) ->
                     'severity': 'ERROR',
                     'match': header,
                     'message': (
-                        '杯赛揭幕写主/客不败须【杯赛揭幕闸】豁免=雷速伤停有源|非联赛外推硬情报；'
+                        '杯赛揭幕写主/客不败须【杯赛揭幕闸】豁免=捷报伤停有源|非联赛外推硬情报；'
                         '禁纯联赛近况+让球民意 (V17.4.56)'
                     ),
                 })

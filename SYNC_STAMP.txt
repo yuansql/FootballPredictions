@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-15 13:50:00
+version_note: V17.4.73 捷报主源（亲爱的点名）：认真拆只开捷报析/MatchDetail（数据分析+现场分析技统/进失球概率+三合一+胜平负+即时走势）；雷速不再必采；体彩仅SP/对阵备份。取证速查重写；SKILL+output-template+防偷懒+01a模板。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-15 12:00:00
 version_note: V17.4.72 过程旁稿（亲爱的点名）：候选必写 01a-认真拆-NNN.md（近况比分表+赛程前后+排除因果+反剧本因果）；01 节末过程=链；01=结论权威；骨架不写01a。lint PROCESS_FILE_DAY=2026-10-15 WARN。SKILL+output-template+防偷懒+references/01a-认真拆模板.md。
 
