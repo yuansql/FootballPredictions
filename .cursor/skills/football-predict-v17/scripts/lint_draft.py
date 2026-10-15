@@ -50,6 +50,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     TICKET_DAY = "2026-09-22"
     TICKET16_DAY = "2026-10-13"
     CANDIDATE_FIRST_DAY = "2026-10-13"
+    PROCESS_FILE_DAY = "2026-10-15"
     LINEUP_GATE_DAY = "2026-09-22"
     DELIVERY_DAY = "2026-09-22"
     FLOW_FIX_DAY = "2026-09-22"
@@ -86,6 +87,7 @@ DEEP_LOCK_DAY = "2026-09-22"  # 深让+锁*须【深让可锁】收据
 TICKET_DAY = "2026-09-22"  # 【今日票面】主交卷（4.41）
 TICKET16_DAY = "2026-10-13"  # V17.4.70：16元8+4+2+2；禁不败拧稳；禁胜+平复式
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
+PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
 LINEUP_GATE_DAY = "2026-09-22"  # 票面非空仓须【临场闸】（4.47）
 DELIVERY_DAY = "2026-09-22"  # 交卷模式/初盘类型/认真拆≤3/伤停未知（4.50）
 FLOW_FIX_DAY = "2026-09-22"  # 流程消矛盾：深让竞彩现盘/冷门仅认真拆（4.51）
@@ -1961,6 +1963,68 @@ def lint_direction_score_consistency(sections: list[dict], day: str | None = Non
     return warnings
 
 
+
+def lint_process_sidecar(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
+    """V17.4.72：票面候选须有 01a 旁稿与过程= 链（日闸 PROCESS_FILE_DAY；缺项 WARN）。"""
+    import os
+    warnings = []
+    if day and day < PROCESS_FILE_DAY:
+        return warnings
+    if not filepath:
+        return warnings
+    try:
+        content = open(filepath, encoding="utf-8").read()
+    except OSError:
+        return warnings
+    cand_m = re.search(r"【票面候选】([^\n]*)", content)
+    if not cand_m:
+        return warnings
+    cand_line = cand_m.group(1)
+    if re.search(r"无|候选空|研究板", cand_line) and not re.findall(r"(?<!\d)(\d{3})(?!\d)", cand_line):
+        return warnings
+    candidates = sorted(set(re.findall(r"(?<!\d)(\d{3})(?!\d)", cand_line)))
+    if not candidates:
+        return warnings
+    day_dir = os.path.dirname(os.path.abspath(filepath))
+    for num in candidates:
+        link_pat = rf"过程\s*=\s*01a-认真拆-{num}\.md"
+        if not re.search(link_pat, content):
+            warnings.append({
+                "rule": "lint_process_sidecar",
+                "severity": "WARN",
+                "match": f"候选{num}",
+                "message": f"01 须链 过程=01a-认真拆-{num}.md（V17.4.72）",
+            })
+        side = os.path.join(day_dir, f"01a-认真拆-{num}.md")
+        if not os.path.isfile(side):
+            warnings.append({
+                "rule": "lint_process_sidecar",
+                "severity": "WARN",
+                "match": f"候选{num}",
+                "message": f"缺过程旁稿 01a-认真拆-{num}.md（V17.4.72）",
+            })
+            continue
+        try:
+            side_txt = open(side, encoding="utf-8").read()
+        except OSError:
+            warnings.append({
+                "rule": "lint_process_sidecar",
+                "severity": "WARN",
+                "match": f"候选{num}",
+                "message": f"无法读取 01a-认真拆-{num}.md",
+            })
+            continue
+        for title in ("【近况比分表】", "【赛程前后】", "【排除因果】", "【反剧本因果】"):
+            if title not in side_txt:
+                warnings.append({
+                    "rule": "lint_process_sidecar",
+                    "severity": "WARN",
+                    "match": f"01a-{num}",
+                    "message": f"01a 缺 {title}（V17.4.72）",
+                })
+    return warnings
+
+
 def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     if day is None:
@@ -1968,7 +2032,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
     print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -2096,6 +2160,15 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_must_gather_triple] ✓ 通过")
+
+        w_proc = lint_process_sidecar(sections, day, filepath=filepath)
+        all_warnings.extend(w_proc)
+        if w_proc:
+            print(f"\n[lint_process_sidecar] 发现 {len(w_proc)} 个问题:")
+            for item in w_proc:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_process_sidecar] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)

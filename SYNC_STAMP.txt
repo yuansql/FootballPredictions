@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-15 12:00:00
+version_note: V17.4.72 过程旁稿（亲爱的点名）：候选必写 01a-认真拆-NNN.md（近况比分表+赛程前后+排除因果+反剧本因果）；01 节末过程=链；01=结论权威；骨架不写01a。lint PROCESS_FILE_DAY=2026-10-15 WARN。SKILL+output-template+防偷懒+references/01a-认真拆模板.md。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-13 10:20:00
 version_note: V17.4.71 先选场（亲爱的点名）：下注单文首【票面候选】≤3→认真拆=候选→票腿⊆候选；禁先铺全表再凑票；分诊弃锁不得把骨架塞进稳/博。lint CANDIDATE_FIRST_DAY=2026-10-13。SKILL+output-template+防偷懒。
 
