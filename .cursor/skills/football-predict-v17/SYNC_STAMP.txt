@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-15 14:30:00
+version_note: V17.4.74 全捷报·不买单关（亲爱的点名）：取证只开捷报（列表荐后SP/让球+析/MatchDetail）；不开sporttery、不开雷速；默认不写单关免核「仅显示单关」。取证速查重写；SKILL+output-template+防偷懒+01a模板+README+使用。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-15 13:50:00
 version_note: V17.4.73 捷报主源（亲爱的点名）：认真拆只开捷报析/MatchDetail（数据分析+现场分析技统/进失球概率+三合一+胜平负+即时走势）；雷速不再必采；体彩仅SP/对阵备份。取证速查重写；SKILL+output-template+防偷懒+01a模板。
 
