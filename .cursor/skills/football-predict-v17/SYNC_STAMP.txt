@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-15 14:35:00
+version_note: V17.4.74 补钉：复盘赛果首选 cp.nowscore.com/jingcaizuqiu/kaijiang_jc_all.html（亲爱的点名）；取证速查入口表+体彩废止节。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-15 14:30:00
 version_note: V17.4.74 全捷报·不买单关（亲爱的点名）：取证只开捷报（列表荐后SP/让球+析/MatchDetail）；不开sporttery、不开雷速；默认不写单关免核「仅显示单关」。取证速查重写；SKILL+output-template+防偷懒+01a模板+README+使用。
 
