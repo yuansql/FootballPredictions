@@ -17,7 +17,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
 12. lint_cold_upset_banner — 冷门预防统一亮牌：场场【冷门预防】触发=是|否（4.37）
 13. lint_hc_spf_single — 文末【让球稳健推荐】无|≤3（4.38；研究板可免 4.52）
 14. lint_deep_lock_receipt — 深让+锁*须【深让可锁】+初盘/水位（4.40）
-15. lint_today_ticket — 文末【今日票面】空仓|方案+腿（4.41）
+15. lint_today_ticket — 文末【今日票面】空仓|方案+腿（4.41）；V17.4.76 同场串/让胜净胜
 16. lint_delivery_pack — 交卷模式/初盘类型/认真拆≤3/伤停未知禁PROCEED（4.50）
 17. lint_fake_heat_cold_exclude — 假热质疑禁止排冷侧无硬情报（4.52）
 18. lint_thin_intel_score — 薄情报/伤停未知研究板装满三格须弱置信（4.52）
@@ -49,6 +49,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     DEEP_LOCK_DAY = "2026-09-22"
     TICKET_DAY = "2026-09-22"
     TICKET16_DAY = "2026-10-13"
+    TICKET_CROSS_DAY = "2026-10-15"
     CANDIDATE_FIRST_DAY = "2026-10-13"
     PROCESS_FILE_DAY = "2026-10-15"
     LINEUP_GATE_DAY = "2026-09-22"
@@ -86,6 +87,7 @@ HC_SPF_SINGLE_DAY = "2026-09-20"  # 让球稳健可荐文末块
 DEEP_LOCK_DAY = "2026-09-22"  # 深让+锁*须【深让可锁】收据
 TICKET_DAY = "2026-09-22"  # 【今日票面】主交卷（4.41）
 TICKET16_DAY = "2026-10-13"  # V17.4.70：16元8+4+2+2；禁不败拧稳；禁胜+平复式
+TICKET_CROSS_DAY = "2026-10-15"  # V17.4.76：过关禁同场两腿；稳让胜(主-N)须主推净胜≥N+1
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
 LINEUP_GATE_DAY = "2026-09-22"  # 票面非空仓须【临场闸】（4.47）
@@ -1728,6 +1730,122 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                     'match': filepath,
                     'message': '临场闸 XI=未确认 → 动作须撤腿|降观望（V17.4.49）',
                 })
+    # V17.4.76：过关禁同场两腿；稳让胜(主-N)须主推/大博净胜≥N+1（日闸 2026-10-15）
+    if not empty and not (day and day < TICKET_CROSS_DAY):
+        from collections import Counter
+
+        def _ticket_legs(line: str) -> str:
+            """只取玩法腿字段，忽略乘积/备注里的编号（如「012让胜不双叠」）。"""
+            parts = re.split(r'[｜|]', line)
+            return parts[1].strip() if len(parts) >= 2 else line
+
+        for m in re.finditer(r'(?:稳|博|大博)\s*=[^\n]+', body):
+            line = m.group(0)
+            if '单场复合' in line:
+                continue
+            nums = re.findall(r'(?<!\d)(\d{3})(?!\d)', _ticket_legs(line))
+            dup = [n for n, c in Counter(nums).items() if c >= 2]
+            if dup:
+                warnings.append({
+                    'rule': 'lint_today_ticket',
+                    'severity': 'ERROR',
+                    'match': filepath,
+                    'message': (
+                        f'过关串禁止同场两腿（编号{dup}）；博默认跨场'
+                        f'（V17.4.76）'
+                    ),
+                })
+                break
+
+        def _primary_score_for(num: str):
+            """主推比分：该场 ## 节 Top3 首格 → 汇总表比分列首格 → 大博比分。"""
+            # 必须锚 ## 标题，禁从文首「票面候选｜012」漂到下一场 Top3
+            sec_pat = (
+                rf'(?:^|\n)##[^\n]*(?:周[一二三四五六日天])?{num}\b'
+                rf'[\s\S]{{0,6000}}?'
+                rf'【比分推荐\s*[·・]?\s*Top3】\s*([^\n]+)'
+            )
+            sm = re.search(sec_pat, content)
+            if sm:
+                sc = re.search(r'(\d+)\s*[-:：]\s*(\d+)', sm.group(1))
+                if sc:
+                    return int(sc.group(1)), int(sc.group(2))
+            # 汇总表：| 周四012 | … | 比分列(index 7) |
+            for row in re.finditer(
+                rf'\|\s*(?:周[一二三四五六日天])?{num}\s*\|[^\n]+', content
+            ):
+                cells = [c.strip() for c in row.group(0).split('|')]
+                if len(cells) >= 9:
+                    sc = re.search(r'(\d+)\s*[-:：]\s*(\d+)', cells[7])
+                    if sc:
+                        return int(sc.group(1)), int(sc.group(2))
+            for bm in re.finditer(r'大博\s*=[^\n]+', body):
+                bl = bm.group(0)
+                legs = _ticket_legs(bl)
+                if num not in legs:
+                    continue
+                sc = re.search(
+                    rf'{num}[^\n]{{0,40}}?比分\s*(\d+)\s*[-:：]\s*(\d+)', legs
+                ) or re.search(
+                    rf'比分\s*(\d+)\s*[-:：]\s*(\d+)', legs
+                )
+                if sc:
+                    return int(sc.group(1)), int(sc.group(2))
+            return None
+
+        for m in re.finditer(r'稳\s*=[^\n]+', body):
+            line = _ticket_legs(m.group(0))
+            for hm in re.finditer(
+                r'(?<!\d)(\d{3})(?!\d)[^\n]{0,30}?让胜\s*\(\s*主\s*-\s*(\d+)\s*\)',
+                line,
+            ):
+                num, n = hm.group(1), int(hm.group(2))
+                need = n + 1
+                sc = _primary_score_for(num)
+                if not sc:
+                    continue
+                h, a = sc
+                margin = h - a
+                if margin < need:
+                    warnings.append({
+                        'rule': 'lint_today_ticket',
+                        'severity': 'ERROR',
+                        'match': filepath,
+                        'message': (
+                            f'{num}稳含让胜(主-{n})但主推比分{h}-{a}'
+                            f'净胜{margin}<{need}（让平/穿档；V17.4.76）'
+                        ),
+                    })
+        # 大博比分与同场稳让胜冲突
+        for bm in re.finditer(r'大博\s*=[^\n]+', body):
+            legs = _ticket_legs(bm.group(0))
+            sc_m = re.search(
+                r'(?<!\d)(\d{3})(?!\d)[^\n]{0,40}?比分\s*(\d+)\s*[-:：]\s*(\d+)',
+                legs,
+            )
+            if not sc_m:
+                continue
+            num, h, a = sc_m.group(1), int(sc_m.group(2)), int(sc_m.group(3))
+            margin = h - a
+            for sm in re.finditer(r'稳\s*=[^\n]+', body):
+                sl = _ticket_legs(sm.group(0))
+                hm = re.search(
+                    rf'(?<!\d){num}(?!\d)[^\n]{{0,30}}?让胜\s*\(\s*主\s*-\s*(\d+)\s*\)',
+                    sl,
+                )
+                if not hm:
+                    continue
+                n = int(hm.group(1))
+                if margin < n + 1:
+                    warnings.append({
+                        'rule': 'lint_today_ticket',
+                        'severity': 'ERROR',
+                        'match': filepath,
+                        'message': (
+                            f'大博{num}比分{h}-{a}与稳让胜(主-{n})冲突'
+                            f'（净胜须≥{n + 1}；V17.4.76）'
+                        ),
+                    })
     return warnings
 
 
@@ -2032,7 +2150,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
     print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}")
     print("-" * 60)
 
     all_warnings = []
