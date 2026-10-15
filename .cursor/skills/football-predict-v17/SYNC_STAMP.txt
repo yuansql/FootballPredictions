@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-15 15:35:00
+version_note: V17.4.75 教练/裁判/捷报猫可采（亲爱的点名）：认真拆允许且建议开教练分析（风格/轮换）、裁判分析（尺度→走向/进球辅证）、捷报猫（伤停/风格旁证）；仍禁把页内荐单/AI/看好某结果焊锁*。取证速查辅扫表+SKILL+防偷懒+output-template。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-15 14:35:00
 version_note: V17.4.74 补钉：复盘赛果首选 cp.nowscore.com/jingcaizuqiu/kaijiang_jc_all.html（亲爱的点名）；取证速查入口表+体彩废止节。
 
