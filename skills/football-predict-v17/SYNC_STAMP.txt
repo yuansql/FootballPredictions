@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-16 11:55:00
+version_note: V17.4.78 取证通道（亲爱的点名·接口优先）：analysisJs+detail 直接请求落盘；ego 补列表 SPF 与教练/裁判/猫；REA 兜底。取证速查重写+SKILL+防偷懒+01a+output-template；lint FETCH_CHANNEL_DAY=2026-10-16 WARN。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-16 09:35:00
 version_note: V17.4.77 比分篮执行（亲爱的点名·听你的A+B）：锁*/深让可锁/屠杀档已装箱须含净胜≥3格；票面默认少买精确比分（大博优先让球/进球，比分仅尖可选）。lint SCORE_PACK_DAY=2026-10-16 WARN + 大博比分 WARN。SKILL+output-template+防偷懒+lint_draft。
 

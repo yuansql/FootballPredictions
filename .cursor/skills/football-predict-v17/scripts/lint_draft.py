@@ -24,6 +24,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
 19. lint_quality_layer — 认真拆主菜质量层四槽；杯赛赛程须含轮换类词；全缺禁锁*满星（4.53）
 20. lint_cup_unveiling_accuracy — 杯赛揭幕：不败须豁免行；薄情报强制比分弃权（4.56）
 21. lint_must_gather_triple — 认真拆必采三件 WARN：伤停/机会代理/初盘（4.58）
+21b. lint_fetch_channel — 认真拆须点名 analysisJs/接口优先/取证通道（4.78 WARN）
 22. lint_score_pack — 锁*/深让可锁/屠杀档已装箱须含净胜≥3（4.77 WARN）
 
 用法：
@@ -61,6 +62,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     QUALITY_LAYER_DAY = "2026-09-23"
     ACCURACY_DAY = "2026-09-23"
     MUST_GATHER_DAY = "2026-09-23"
+    FETCH_CHANNEL_DAY = "2026-10-16"
     INTEL_DIR_DAY = "2026-10-12"
 """
 
@@ -100,6 +102,7 @@ JUDGE_FIX_DAY = "2026-09-22"  # 弱方向/假热闸/薄情报比分（4.52）
 QUALITY_LAYER_DAY = "2026-09-23"  # 主菜质量层四槽（4.53）
 ACCURACY_DAY = "2026-09-23"  # 准度/杯赛揭幕（4.56）
 MUST_GATHER_DAY = "2026-09-23"  # 认真拆必采三件 WARN（4.58）
+FETCH_CHANNEL_DAY = "2026-10-16"  # V17.4.78：认真拆须点名 analysisJs/接口优先（WARN）
 INTEL_DIR_DAY = "2026-10-12"  # V17.4.69：排胜负边必须硬情报词（质疑不得单独过闸）
 FORM_GATE_DAY = "2026-09-16" # 状态评分硬闸从这天起检查
 BOTH_SCORE_DAY = "2026-09-16" # BOTH_SCORE 比分补偿从这天起检查
@@ -1141,6 +1144,38 @@ def lint_must_gather_triple(sections: list[dict], day: str | None = None) -> lis
             'message': (
                 '认真拆缺必采三件：' + '、'.join(missing) +
                 '（V17.4.58；WARN only，补采抬准）'
+            ),
+        })
+    return warnings
+
+
+def lint_fetch_channel(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.78：认真拆（含取证清单）须点名接口优先通道——analysisJs / 取证通道=接口优先 / h_data|a_data。
+    仅 WARN，防只开浏览器不落盘装取证。
+    """
+    if day and day < FETCH_CHANNEL_DAY:
+        return []
+
+    marker = re.compile(
+        r'analysisJs|取证通道\s*=\s*接口优先|接口优先|h_data|a_data|data\d+\.js',
+        re.I,
+    )
+    warnings = []
+    for sec in sections:
+        header = sec['header']
+        blob = '\n'.join(sec['lines'])
+        if not re.search(r'###?\s*取证清单|【取证清单】', blob):
+            continue
+        if marker.search(blob):
+            continue
+        warnings.append({
+            'rule': 'lint_fetch_channel',
+            'severity': 'WARN',
+            'match': header,
+            'message': (
+                '认真拆取证未点名 analysisJs/接口优先（V17.4.78；WARN only；'
+                '主菜应直接请求 analysisJs+detail 并落盘 _raw/）'
             ),
         })
     return warnings
@@ -2240,7 +2275,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
     print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -2369,6 +2404,15 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_must_gather_triple] ✓ 通过")
+
+        w_fc = lint_fetch_channel(sections, day)
+        all_warnings.extend(w_fc)
+        if w_fc:
+            print(f"\n[lint_fetch_channel] 发现 {len(w_fc)} 个问题:")
+            for item in w_fc:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_fetch_channel] ✓ 通过")
 
         w_proc = lint_process_sidecar(sections, day, filepath=filepath)
         all_warnings.extend(w_proc)
