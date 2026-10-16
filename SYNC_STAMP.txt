@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-16 14:05:00
+version_note: V17.4.78 补钉：使用.md 升版并写入「下载后配合什么用」（宿主+日夹+直接请求+ego+lint）；sync 将使用.md 拷进 Cursor/Agents skill；README 跟版；SKILL 按需读表加使用.md。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-16 11:55:00
 version_note: V17.4.78 取证通道（亲爱的点名·接口优先）：analysisJs+detail 直接请求落盘；ego 补列表 SPF 与教练/裁判/猫；REA 兜底。取证速查重写+SKILL+防偷懒+01a+output-template；lint FETCH_CHANNEL_DAY=2026-10-16 WARN。
 

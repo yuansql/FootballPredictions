@@ -1,21 +1,18 @@
-# FootballPredictions · 2足球框架 V17.4.74
+# FootballPredictions · 2足球框架 V17.4.78
 
 体彩/竞彩足球预测框架 + 可分发 Agent Skill。  
-**当前执行版 = V17.4.74**（细则以 `SKILL.md` 为准）。  
-**V17.4.74**：取证**全捷报**（列表荐后 SP + 析/MatchDetail）；体彩官网与雷速均不再必采；**默认不写单关**。  
-**V17.4.73**：认真拆主源=**捷报** MatchDetail（技统/进失球概率/即时走势）；**雷速不再必采**。  
-**V17.4.72**：候选认真拆过程旁稿 **`01a-认真拆-NNN.md`**；`01` 仍唯一结论权威；骨架仍瘦。  
-**V17.4.71**：先粗筛 **【票面候选】≤3** 再认真拆；票腿必须 ∈ 候选。  
-**V17.4.70**：默认 **16 元 / 8+4+2+2**；稳=让球胜负或锁\*单选；博=进球双选×胜平负单选。
+**当前执行版 = V17.4.78**（细则以 `SKILL.md` 为准）。  
+**V17.4.78**：取证**接口优先**——`analysisJs`+`detail` 直接请求落盘；**ego** 补列表 SPF 与教练/裁判/猫；REA 兜底。  
+**V17.4.77**：锁\*/深让可锁/屠杀档→比分篮须含净胜≥3；票面默认少买精确比分。  
+**V17.4.76**：博/稳过关腿默认跨场；稳让胜(主-N)须主推净胜≥N+1。  
+**V17.4.75**：认真拆可采教练/裁判/捷报猫（禁页内荐单焊锁\*）。  
+**V17.4.74**：取证全捷报；体彩官网与雷速不再必采；默认不写单关。  
+**V17.4.72–71**：候选 `01a`；先选【票面候选】≤3；默认票面 16 元 8+4+2+2。
 
 主菜：伤停/战意/形态/剧本定方向。佐料：盘口/SP/Edge 只做出票闸。  
-方向必须给（锁\* / 主不败 / 客不败）；禁胶着；`01` 场场 `排除=`｜`剩余=`｜`二次=`。  
-**V17.4.43**：票面 8|12；一张二串一或两张稳+博；半全场可组合；比分/半全场可单场。  
-**V17.4.42**：票面/研究二串一可跨 **胜平负×进球数×比分×让球**；点名最少二串一→方案≥二串；预算听用户。  
-**V17.4.41**：【今日票面】主交卷；票面席=可买腿；复盘主 KPI=票中。  
-**V17.4.38**：【让球稳健推荐】——让球盘稳则可荐（单场或让球 B 串）。
+方向必须给（锁\* / 主不败 / 客不败）；禁胶着；`01` 场场 `排除=`｜`剩余=`｜`二次=`。
 
-**完整用法 → [使用.md](./使用.md)** · 作业细则 → [SKILL.md](./SKILL.md)
+**完整用法（装完配合什么）→ [使用.md](./使用.md)** · 作业细则 → [SKILL.md](./SKILL.md) · 取证 URL → [references/取证速查.md](./references/取证速查.md)
 
 仓库：https://github.com/yuansql/FootballPredictions
 
@@ -29,11 +26,14 @@
 npx skills add yuansql/FootballPredictions --skill football-predict-v17
 ```
 
+装完读 skill 包内 **`使用.md`**：「下载后配合什么用」（日夹 + 直接请求 + ego + lint）。
+
 ### 方式 B · Git 克隆
 
 ```bash
 git clone https://github.com/yuansql/FootballPredictions.git
 cd FootballPredictions
+bash scripts/sync-skill-bundle.sh
 ```
 
 ### 方式 C · 千问 / DeepSeek（精简分贴）
@@ -53,38 +53,37 @@ openskills install yuansql/FootballPredictions
 
 ```text
 FootballPredictions/
-├── 使用.md
+├── 使用.md                 ← 安装/配套说明（sync 进 skill）
 ├── README.md
-├── SKILL.md                 ← 执行器正文（与 skills/ 同文）
+├── SKILL.md
 ├── output-template.md
+├── 防偷懒.md
 ├── SYNC_STAMP.txt
-├── references/              ← 8 个框架正文 + 03-复盘模板
-├── rules/                   ← V15.6 补丁
+├── references/
+├── rules/
 ├── scripts/
 │   ├── sync-skill-bundle.sh
-│   ├── lint_draft.py
-│   ├── structure_gate.py
-│   ├── deep_away_trap.py
-│   └── gen_rma_detail_table.py
+│   └── lint_draft.py
 └── skills/football-predict-v17/
     ├── SKILL.md
+    ├── 使用.md
     ├── output-template.md
-    └── references/          ← sync 生成的精简副本
+    ├── references/
+    └── scripts/
 ```
 
-已删：`archive/`、回测文档/空 drafts、离线回测脚本、ICS/红旗独立 CLI（规则留在 SKILL，稿内自评 + lint 兜底）。
 ---
 
 ## 维护者
 
-改 `SKILL.md` / `output-template.md` / `references/*.txt` / `rules/` 后必须：
+改 `SKILL.md` / `output-template.md` / `使用.md` / `references/` / `rules/` 后必须：
 
 ```bash
 bash scripts/sync-skill-bundle.sh
 python3 scripts/lint_draft.py <日夹>/01-竞彩分析.md
 ```
 
-`README.md` 与 `使用.md` **不在** sync 脚本里，改版本号时要手改这两份。
+`README.md` 只留仓库根；`使用.md` **会**随 sync 进 skill 包（改版本号时两份文首都要手改）。
 
 ---
 
