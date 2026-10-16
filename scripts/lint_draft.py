@@ -17,13 +17,14 @@ lint_draft.py — V17.4.56 日闸 lint 工具
 12. lint_cold_upset_banner — 冷门预防统一亮牌：场场【冷门预防】触发=是|否（4.37）
 13. lint_hc_spf_single — 文末【让球稳健推荐】无|≤3（4.38；研究板可免 4.52）
 14. lint_deep_lock_receipt — 深让+锁*须【深让可锁】+初盘/水位（4.40）
-15. lint_today_ticket — 文末【今日票面】空仓|方案+腿（4.41）；V17.4.76 同场串/让胜净胜
+15. lint_today_ticket — 文末【今日票面】空仓|方案+腿（4.41）；V17.4.76 同场串/让胜净胜；V17.4.77 大博精确比分 WARN
 16. lint_delivery_pack — 交卷模式/初盘类型/认真拆≤3/伤停未知禁PROCEED（4.50）
 17. lint_fake_heat_cold_exclude — 假热质疑禁止排冷侧无硬情报（4.52）
 18. lint_thin_intel_score — 薄情报/伤停未知研究板装满三格须弱置信（4.52）
 19. lint_quality_layer — 认真拆主菜质量层四槽；杯赛赛程须含轮换类词；全缺禁锁*满星（4.53）
 20. lint_cup_unveiling_accuracy — 杯赛揭幕：不败须豁免行；薄情报强制比分弃权（4.56）
 21. lint_must_gather_triple — 认真拆必采三件 WARN：伤停/机会代理/初盘（4.58）
+22. lint_score_pack — 锁*/深让可锁/屠杀档已装箱须含净胜≥3（4.77 WARN）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]   # 不传 --day：取路径中日期，无则今天
@@ -50,6 +51,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     TICKET_DAY = "2026-09-22"
     TICKET16_DAY = "2026-10-13"
     TICKET_CROSS_DAY = "2026-10-15"
+    SCORE_PACK_DAY = "2026-10-16"
     CANDIDATE_FIRST_DAY = "2026-10-13"
     PROCESS_FILE_DAY = "2026-10-15"
     LINEUP_GATE_DAY = "2026-09-22"
@@ -88,6 +90,7 @@ DEEP_LOCK_DAY = "2026-09-22"  # 深让+锁*须【深让可锁】收据
 TICKET_DAY = "2026-09-22"  # 【今日票面】主交卷（4.41）
 TICKET16_DAY = "2026-10-13"  # V17.4.70：16元8+4+2+2；禁不败拧稳；禁胜+平复式
 TICKET_CROSS_DAY = "2026-10-15"  # V17.4.76：过关禁同场两腿；稳让胜(主-N)须主推净胜≥N+1
+SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
 LINEUP_GATE_DAY = "2026-09-22"  # 票面非空仓须【临场闸】（4.47）
@@ -1846,6 +1849,93 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                             f'（净胜须≥{n + 1}；V17.4.76）'
                         ),
                     })
+        # V17.4.77：大博精确比分仅尖可选（WARN，不拦交卷）
+        if not (day and day < SCORE_PACK_DAY):
+            for bm in re.finditer(r'大博\s*=[^\n]+', body):
+                line = bm.group(0)
+                if re.search(r'比分\s*\d+\s*[-:：]\s*\d+|比分\d', line):
+                    if not re.search(r'尖可选|仅尖|研究向比分', line):
+                        warnings.append({
+                            'rule': 'lint_today_ticket',
+                            'severity': 'WARN',
+                            'match': filepath,
+                            'message': (
+                                '大博含精确比分：默认优先让球/进球；'
+                                '比分仅尖可选（可标尖可选；V17.4.77）'
+                            ),
+                        })
+                        break
+    return warnings
+
+
+def lint_score_pack(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.77：锁* / 【深让可锁】 / 净胜档含屠杀 且已出比分篮（非弃权）
+    → 三格至少一格净胜≥3（锁主看主净胜，锁客看客净胜）。WARN。
+    """
+    if day and day < SCORE_PACK_DAY:
+        return []
+    warnings = []
+    for sec in sections:
+        blob = '\n'.join(sec.get('lines') or [])
+        header = sec.get('header') or ''
+        # 只认方向原子，禁「禁锁客/双新军锁主闸/挡锁客」等旁文
+        lock_home = bool(re.search(
+            r'(?:方向|推方向|冻向)\s*=\s*锁主|锁主\*', blob
+        ))
+        lock_away = bool(re.search(
+            r'(?:方向|推方向|冻向)\s*=\s*锁客|锁客\*', blob
+        ))
+        trigger = bool(
+            lock_home
+            or lock_away
+            or re.search(r'【深让可锁】', blob)
+            or re.search(r'净胜档\s*=[^\n]*屠杀', blob)
+        )
+        if not trigger:
+            continue
+        top = None
+        lines = sec.get('lines') or []
+        for i, line in enumerate(lines):
+            if '【比分推荐' in line and 'Top3' in line:
+                top = line
+                if i + 1 < len(lines) and not re.search(
+                    r'\d+\s*[-:：]\s*\d+', line
+                ):
+                    top = line + ' ' + lines[i + 1]
+                break
+        if not top:
+            continue
+        if re.search(r'比分弃权|弃权', top):
+            continue
+        scores = [
+            (int(a), int(b))
+            for a, b in re.findall(r'(\d+)\s*[-:：]\s*(\d+)', top)
+        ]
+        if len(scores) < 1:
+            continue
+        ok = False
+        if lock_home and not lock_away:
+            ok = any(h - a >= 3 for h, a in scores)
+            need = '主净胜≥3'
+        elif lock_away and not lock_home:
+            ok = any(a - h >= 3 for h, a in scores)
+            need = '客净胜≥3'
+        else:
+            # 深让可锁/屠杀但方向写不败：任一侧净胜≥3 即可
+            ok = any(abs(h - a) >= 3 for h, a in scores)
+            need = '净胜≥3'
+        if not ok:
+            shown = '/'.join(f'{h}-{a}' for h, a in scores[:4])
+            warnings.append({
+                'rule': 'lint_score_pack',
+                'severity': 'WARN',
+                'match': header[:50],
+                'message': (
+                    f'比分篮[{shown}]缺{need}格'
+                    f'（锁*/深让可锁/屠杀档；V17.4.77）'
+                ),
+            })
     return warnings
 
 
@@ -2150,7 +2240,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
     print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -2178,6 +2268,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
             ("lint_handicap_only_channel", lint_handicap_only_channel),
             ("lint_cold_upset_banner", lint_cold_upset_banner),
             ("lint_direction_score_consistency", lint_direction_score_consistency),
+            ("lint_score_pack", lint_score_pack),
             ("lint_deep_away_trap", lint_deep_away_trap),
             ("lint_form_gate", lint_form_gate),
             ("lint_both_score", lint_both_score),
@@ -2916,11 +3007,38 @@ def _self_check() -> None:
             items = run_lint(p)['items']
     assert not [i for i in items if i['rule'] == 'lint_cold_upset_banner'], 'day 须从路径推断，骨架免冷门预防'
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no: ok')
+    # V17.4.77 比分篮净胜≥3
+    bad_pack = [{'header': '周四003 波 vs 勒', 'lines': [
+        '方向=锁客*',
+        '净胜档=中胜',
+        '【比分推荐 · Top3】0-2 / 1-3 / 1-2',
+    ]}]
+    assert any(
+        '净胜' in x['message']
+        for x in lint_score_pack(bad_pack, day='2026-10-16')
+    ), lint_score_pack(bad_pack, day='2026-10-16')
+    good_pack = [{'header': '周四012 本 vs 凯', 'lines': [
+        '方向=锁主*',
+        '净胜档=中胜偏屠杀',
+        '【深让可锁】初盘=竞彩现盘',
+        '【比分推荐 · Top3】3-0 / 2-0 / 3-1',
+    ]}]
+    assert lint_score_pack(good_pack, day='2026-10-16') == []
+    assert lint_score_pack(bad_pack, day='2026-10-15') == []
+    # 禁锁客 / 双新军锁主闸 不得触发
+    no_lock = [{'header': '周四005 萨 vs 米', 'lines': [
+        '方向=客不败｜禁锁客',
+        '【双新军锁主闸】触发=否',
+        '净胜档=小胜或平',
+        '【比分推荐 · Top3】0-1 / 1-1 / 1-2',
+    ]}]
+    assert lint_score_pack(no_lock, day='2026-10-16') == []
+
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.57 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.77 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
