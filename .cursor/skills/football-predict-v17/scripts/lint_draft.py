@@ -52,6 +52,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     TICKET_DAY = "2026-09-22"
     TICKET16_DAY = "2026-10-13"
     TICKET_CROSS_DAY = "2026-10-15"
+    TICKET_STABLE_DAY = "2026-10-19"
     SCORE_PACK_DAY = "2026-10-16"
     CANDIDATE_FIRST_DAY = "2026-10-13"
     PROCESS_FILE_DAY = "2026-10-15"
@@ -92,6 +93,7 @@ DEEP_LOCK_DAY = "2026-09-22"  # 深让+锁*须【深让可锁】收据
 TICKET_DAY = "2026-09-22"  # 【今日票面】主交卷（4.41）
 TICKET16_DAY = "2026-10-13"  # V17.4.70：16元8+4+2+2；禁不败拧稳；禁胜+平复式
 TICKET_CROSS_DAY = "2026-10-15"  # V17.4.76：过关禁同场两腿；稳让胜(主-N)须主推净胜≥N+1
+TICKET_STABLE_DAY = "2026-10-19"  # V17.4.79：CAUTION禁稳；客热第二腿禁稳；让负进稳须净胜≥2
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
@@ -1900,6 +1902,104 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                             ),
                         })
                         break
+    # V17.4.79：CAUTION禁稳；客热第二腿禁稳；让负进稳须净胜≥2（日闸 2026-10-19）
+    if not empty and not (day and day < TICKET_STABLE_DAY):
+        def _block_for_num(num: str) -> str:
+            m = re.search(
+                rf'##\s*[^\n]*?(?<!\d){num}(?!\d)[^\n]*\n([\s\S]*?)(?=\n## |\Z)',
+                content,
+            )
+            return m.group(0) if m else ''
+
+        def _spf_triple(blob: str):
+            m = re.search(
+                r'现SP\s*=\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)',
+                blob,
+            )
+            if not m:
+                return None
+            return float(m.group(1)), float(m.group(2)), float(m.group(3))
+
+        def _away_hot(blob: str) -> bool:
+            sp = _spf_triple(blob)
+            if not sp:
+                return False
+            h, d, a = sp
+            return a < h and a < d
+
+        def _leg_is_awayish(leg: str) -> bool:
+            if re.search(r'让胜', leg):
+                return False
+            return bool(re.search(r'锁客|客胜|(?<![主让])客(?!\s*不败)|让负', leg))
+
+        for m in re.finditer(r'稳\s*=[^\n]+', body):
+            line = m.group(0)
+            parts = re.split(r'[｜|]', line)
+            legs_field = parts[1].strip() if len(parts) >= 2 else line
+            nums = re.findall(r'(?<!\d)(\d{3})(?!\d)', legs_field)
+            for num in nums:
+                blob = _block_for_num(num)
+                if not blob:
+                    continue
+                if re.search(r'动作\s*=\s*(CAUTION|STOP)|弱置信\s*=\s*是', blob):
+                    warnings.append({
+                        'rule': 'lint_today_ticket',
+                        'severity': 'ERROR',
+                        'match': filepath,
+                        'message': (
+                            f'{num}为 CAUTION/STOP/弱置信，禁止进稳'
+                            f'（最多博/大博；V17.4.79）'
+                        ),
+                    })
+            # 第二腿客热
+            if re.search(r'[×xX]', legs_field):
+                segs = re.split(r'[×xX]', legs_field)
+                if len(segs) >= 2:
+                    second = segs[1].strip()
+                    m2 = re.search(r'(?<!\d)(\d{3})(?!\d)', second)
+                    if m2 and _leg_is_awayish(second):
+                        n2 = m2.group(1)
+                        blob2 = _block_for_num(n2)
+                        if blob2 and _away_hot(blob2):
+                            warnings.append({
+                                'rule': 'lint_today_ticket',
+                                'severity': 'ERROR',
+                                'match': filepath,
+                                'message': (
+                                    f'稳第二腿{n2}为客热锁客/客胜/让负，禁进稳'
+                                    f'（改换腿/降博；V17.4.79）'
+                                ),
+                            })
+            # 让负进稳须净胜≥2
+            for seg in re.split(r'[×xX]', legs_field):
+                if not re.search(r'让负', seg):
+                    continue
+                mn = re.search(r'(?<!\d)(\d{3})(?!\d)', seg)
+                if not mn:
+                    continue
+                num = mn.group(1)
+                blob = _block_for_num(num)
+                if not blob:
+                    continue
+                mid_or_blow = bool(re.search(
+                    r'净胜档\s*=\s*(中胜|屠杀)', blob
+                ))
+                # 比分篮任一带客净≥2（0-2/0-3/1-3…；1-2 净1不够）
+                basket_ge2 = bool(re.search(
+                    r'(?<!\d)(?:0-[2-9]|1-[3-9]|2-[4-9]|[3-9]-[5-9])(?!\d)',
+                    blob,
+                ))
+                if mid_or_blow or basket_ge2:
+                    continue
+                warnings.append({
+                    'rule': 'lint_today_ticket',
+                    'severity': 'ERROR',
+                    'match': filepath,
+                    'message': (
+                        f'{num}让负进稳须净胜档中胜/屠杀或比分篮客净≥2'
+                        f'（V17.4.79）'
+                    ),
+                })
     return warnings
 
 
@@ -2275,7 +2375,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
     print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}")
     print("-" * 60)
 
     all_warnings = []

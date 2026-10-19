@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-19 10:55:00
+version_note: V17.4.79 票面稳腿硬闸（亲爱的点名·听你的·周末复盘）：CAUTION/弱置信禁稳；客热锁客/客胜/让负禁进稳第二腿；让负进稳须净胜档中胜/屠杀或比分篮客净≥2。lint TICKET_STABLE_DAY=2026-10-19。SKILL+防偷懒+使用+output-template+lint_draft。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-16 14:05:00
 version_note: V17.4.78 补钉：使用.md 升版并写入「下载后配合什么用」（宿主+日夹+直接请求+ego+lint）；sync 将使用.md 拷进 Cursor/Agents skill；README 跟版；SKILL 按需读表加使用.md。
 
