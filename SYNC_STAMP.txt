@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-20 09:45:00
+version_note: V17.4.80 胆分散+强弱对位（亲爱的点名·10-19 蒙扎4-0共同胆穿）：低结构(draw_priority)场最多进1张票；认真拆排主胜/客胜须【强弱对位】被排方强项×对方弱项打得到=否，打得到禁排。lint HUB_PAIR_DAY=2026-10-20 ERROR + self-check。SKILL+防偷懒+使用+README+output-template+01a模板+lint_draft。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-19 10:55:00
 version_note: V17.4.79 票面稳腿硬闸（亲爱的点名·听你的·周末复盘）：CAUTION/弱置信禁稳；客热锁客/客胜/让负禁进稳第二腿；让负进稳须净胜档中胜/屠杀或比分篮客净≥2。lint TICKET_STABLE_DAY=2026-10-19。SKILL+防偷懒+使用+output-template+lint_draft。
 

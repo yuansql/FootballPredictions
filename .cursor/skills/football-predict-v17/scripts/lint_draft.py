@@ -26,6 +26,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
 21. lint_must_gather_triple — 认真拆必采三件 WARN：伤停/机会代理/初盘（4.58）
 21b. lint_fetch_channel — 认真拆须点名 analysisJs/接口优先/取证通道（4.78 WARN）
 22. lint_score_pack — 锁*/深让可锁/屠杀档已装箱须含净胜≥3（4.77 WARN）
+23. lint_hub_pairing — 低结构场最多进 1 张票；认真拆硬排须【强弱对位】打得到=否（4.80）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]   # 不传 --day：取路径中日期，无则今天
@@ -53,6 +54,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     TICKET16_DAY = "2026-10-13"
     TICKET_CROSS_DAY = "2026-10-15"
     TICKET_STABLE_DAY = "2026-10-19"
+    HUB_PAIR_DAY = "2026-10-20"
     SCORE_PACK_DAY = "2026-10-16"
     CANDIDATE_FIRST_DAY = "2026-10-13"
     PROCESS_FILE_DAY = "2026-10-15"
@@ -94,6 +96,7 @@ TICKET_DAY = "2026-09-22"  # 【今日票面】主交卷（4.41）
 TICKET16_DAY = "2026-10-13"  # V17.4.70：16元8+4+2+2；禁不败拧稳；禁胜+平复式
 TICKET_CROSS_DAY = "2026-10-15"  # V17.4.76：过关禁同场两腿；稳让胜(主-N)须主推净胜≥N+1
 TICKET_STABLE_DAY = "2026-10-19"  # V17.4.79：CAUTION禁稳；客热第二腿禁稳；让负进稳须净胜≥2
+HUB_PAIR_DAY = "2026-10-20"  # V17.4.80：低结构场≤1张票；硬排须【强弱对位】打得到=否
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
@@ -2368,6 +2371,67 @@ def lint_process_sidecar(sections: list[dict], day: str | None = None, filepath:
     return warnings
 
 
+def lint_hub_pairing(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
+    """V17.4.80：① 低结构(draw_priority)场最多进 1 张票；② 认真拆排主胜/客胜须【强弱对位】且打得到=否。"""
+    warnings = []
+    if day and day < HUB_PAIR_DAY:
+        return warnings
+    for sec in sections:
+        blob = '\n'.join(sec['lines'])
+        if '【取证清单】' not in blob:
+            continue
+        m = re.search(r'排除\s*=\s*(主胜|客胜)', blob)
+        if not m:
+            continue
+        pm = re.search(r'【强弱对位】[^\n]*', blob)
+        if not pm:
+            warnings.append({
+                'rule': 'lint_hub_pairing', 'severity': 'ERROR', 'match': sec['header'],
+                'message': f'排除={m.group(1)} 须写【强弱对位】被排方强项=…｜对方弱项=…｜打得到=否（V17.4.80）',
+            })
+        elif re.search(r'打得到\s*=\s*是', pm.group(0)):
+            warnings.append({
+                'rule': 'lint_hub_pairing', 'severity': 'ERROR', 'match': sec['header'],
+                'message': f'被排方强项打得到对方弱项，禁排{m.group(1)}；改暂缓或换侧（V17.4.80）',
+            })
+        elif not re.search(r'打得到\s*=\s*否', pm.group(0)):
+            warnings.append({
+                'rule': 'lint_hub_pairing', 'severity': 'ERROR', 'match': sec['header'],
+                'message': '【强弱对位】须写 打得到=否|是（V17.4.80）',
+            })
+    if not filepath:
+        return warnings
+    try:
+        content = open(filepath, encoding='utf-8').read()
+    except OSError:
+        return warnings
+    tickets = []
+    for tm in re.finditer(r'(?:稳|博|大博|机动|尖可选)\s*=[^\n]+', content):
+        parts = re.split(r'[｜|]', tm.group(0))
+        legs = parts[1] if len(parts) >= 2 else tm.group(0)
+        nums = set(re.findall(r'(?<!\d)(\d{3})(?!\d)', legs))
+        if nums:
+            tickets.append(nums)
+    for sec in sections:
+        blob = '\n'.join(sec['lines'])
+        nm = re.search(r'(?:周[一二三四五六日天])?(\d{3})', sec['header'])
+        if not nm:
+            continue
+        low = bool(re.search(r'触发\s*=\s*draw_priority', blob))
+        if not low:
+            sp = re.search(r'现SP\s*=\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)', blob)
+            low = bool(sp) and compute_structure_tag(*map(float, sp.groups())) == 'draw_priority'
+        if not low:
+            continue
+        n = sum(1 for t in tickets if nm.group(1) in t)
+        if n >= 2:
+            warnings.append({
+                'rule': 'lint_hub_pairing', 'severity': 'ERROR', 'match': sec['header'],
+                'message': f'低结构场{nm.group(1)}进了{n}张票，最多1张，禁当共同胆（V17.4.80）',
+            })
+    return warnings
+
+
 def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     if day is None:
@@ -2522,6 +2586,15 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_process_sidecar] ✓ 通过")
+
+        w_hub = lint_hub_pairing(sections, day, filepath=filepath)
+        all_warnings.extend(w_hub)
+        if w_hub:
+            print(f"\n[lint_hub_pairing] 发现 {len(w_hub)} 个问题:")
+            for item in w_hub:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_hub_pairing] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)
@@ -3178,7 +3251,25 @@ def _self_check() -> None:
     ]}]
     assert lint_score_pack(no_lock, day='2026-10-16') == []
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77: ok')
+    # V17.4.80 低结构场≤1张票 + 强弱对位
+    hub_sec = [{'header': '周一001 蒙 vs 卡', 'lines': [
+        '【取证清单】', '排除=主胜｜理由=主双中卫伤停',
+        '【低结构平优先闸】触发=draw_priority',
+    ]}]
+    assert any('强弱对位' in x['message'] for x in lint_hub_pairing(hub_sec, day='2026-10-20'))
+    hub_sec[0]['lines'].append('【强弱对位】被排方强项=主进攻｜对方弱项=客虚高防守｜打得到=是')
+    assert any('禁排' in x['message'] for x in lint_hub_pairing(hub_sec, day='2026-10-20'))
+    assert lint_hub_pairing(hub_sec, day='2026-10-19') == []
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+        tf.write('博=4元｜001让负 × 007让负\n大博=2元｜001让负 × 002让胜\n')
+        fp = tf.name
+    try:
+        hub_sec[0]['lines'][-1] = '【强弱对位】被排方强项=主进攻｜对方弱项=客锋线｜打得到=否'
+        assert any('共同胆' in x['message'] for x in lint_hub_pairing(hub_sec, day='2026-10-20', filepath=fp))
+    finally:
+        os.unlink(fp)
+
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80: ok')
 
 
 if __name__ == "__main__":
