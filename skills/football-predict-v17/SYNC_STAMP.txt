@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-20 19:58:00
+version_note: V17.4.84 修订2（亲爱的点名「出的单子也可以买复式 12元的资金每天 玩法不限」）：每天资金默认12元（上限），形态自配、复式可买；原16元8+4+2+2默认作废。SKILL+output-template+防偷懒+使用+README+lint 文案。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-20 19:50:00
 version_note: V17.4.84 修订（亲爱的改口「每张票最少两场串一起」→选至少两场）：撤「每张≤2场」上限，改为每张≥2场禁单关（lint ERROR），串数不封顶、默认优先两场。
 

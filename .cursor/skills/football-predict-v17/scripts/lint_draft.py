@@ -1610,7 +1610,7 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
             'rule': 'lint_today_ticket',
             'severity': 'ERROR',
             'match': filepath,
-            'message': '【今日票面】须含 预算=（默认16元；V17.4.70）',
+            'message': '【今日票面】须含 预算=（默认每天12元；V17.4.84）',
         })
     empty = bool(re.search(r'方案\s*=\s*空仓|空仓', body))
     # V17.4.71：先选【票面候选】（空仓日也要有；日闸 2026-10-13）
