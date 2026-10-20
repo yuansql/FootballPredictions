@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-20 19:40:00
+version_note: V17.4.84 二串一封顶+玩法不限（亲爱的点名·「票面最多二串一，玩法不限，没有必要锁定玩法，稳可以赚钱就行」）：每张票≤2场；稳/博/大博玩法限定作废（胜+平复式可进、大博比分不再WARN）；稳只须命中返还>本金（乘积≥2.5作废）；其余稳闸/胆分散/同场禁串不动。lint PLAY_FREE_DAY=2026-10-21 + self-check。SKILL+防偷懒+使用+README+output-template+lint_draft。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-20 19:25:00
 version_note: V17.4.83 市场漏只记账（亲爱的点名·「算不过体彩市场，准确率高就行；5点门槛过不了几场」·改）：4.82 剔出候选/没漏空仓作废；选场回准确率；【市场漏】照写不挡票（缺行 ERROR，没边 WARN）；我估开赛前写死；30场复查没用就删。SKILL+防偷懒+使用+README+output-template+01a+lint_draft。
 

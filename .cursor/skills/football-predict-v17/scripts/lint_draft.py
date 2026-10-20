@@ -58,6 +58,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     HUB_PAIR_DAY = "2026-10-20"
     EDGE_HUB_DAY = "2026-10-20"
     MARKET_EDGE_DAY = "2026-10-21"
+    PLAY_FREE_DAY = "2026-10-21"
     SCORE_PACK_DAY = "2026-10-16"
     CANDIDATE_FIRST_DAY = "2026-10-13"
     PROCESS_FILE_DAY = "2026-10-15"
@@ -102,6 +103,7 @@ TICKET_STABLE_DAY = "2026-10-19"  # V17.4.79：CAUTION禁稳；客热第二腿�
 HUB_PAIR_DAY = "2026-10-20"  # V17.4.80：低结构场≤1张票；硬排须【强弱对位】打得到=否
 EDGE_HUB_DAY = "2026-10-20"  # V17.4.81：没边空仓账本=过；押客禁胆；排主胜须主场=挡得住
 MARKET_EDGE_DAY = "2026-10-21"  # V17.4.82/83：候选须【市场漏】行；没边只 WARN 记账
+PLAY_FREE_DAY = "2026-10-21"  # V17.4.84：每张票≤2场；玩法不限（复式/大博比分不再拦）
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
@@ -1721,7 +1723,8 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                 'message': '禁止10+4+2把多出的2元加厚稳（V17.4.70）',
             })
         dc_re = r'胜\s*\+\s*平|负\s*\+\s*平|平\s*\+\s*胜|平\s*\+\s*负'
-        for m in re.finditer(r'(?:稳|博|大博|机动)\s*=[^\n]+', body):
+        dc_lines = [] if not (day and day < PLAY_FREE_DAY) else re.finditer(r'(?:稳|博|大博|机动)\s*=[^\n]+', body)
+        for m in dc_lines:
             line = m.group(0)
             if re.search(dc_re, line):
                 warnings.append({
@@ -1894,8 +1897,8 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                             f'（净胜须≥{n + 1}；V17.4.76）'
                         ),
                     })
-        # V17.4.77：大博精确比分仅尖可选（WARN，不拦交卷）
-        if not (day and day < SCORE_PACK_DAY):
+        # V17.4.77：大博精确比分仅尖可选（WARN，不拦交卷）；4.84 起玩法不限
+        if not (day and day < SCORE_PACK_DAY) and (day and day < PLAY_FREE_DAY):
             for bm in re.finditer(r'大博\s*=[^\n]+', body):
                 line = bm.group(0)
                 if re.search(r'比分\s*\d+\s*[-:：]\s*\d+|比分\d', line):
@@ -2504,6 +2507,16 @@ def lint_edge_hub(sections: list[dict], day: str | None = None, filepath: str | 
                 'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': f'{num}押客',
                 'message': f'押客腿{num}进了{n}张票，最多1张，禁当共同胆（V17.4.81）',
             })
+    if not (day and day < PLAY_FREE_DAY):
+        for line in lines:
+            parts = re.split(r'[｜|]', line)
+            legs = parts[1] if len(parts) >= 2 else line
+            nums = set(re.findall(r'(?<!\d)(\d{3})(?!\d)', legs))
+            if len(nums) > 2:
+                warnings.append({
+                    'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': line[:30],
+                    'message': f'一张票串了{len(nums)}场，最多二串一（V17.4.84）',
+                })
     return warnings
 
 
@@ -2558,7 +2571,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
     print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, HUB_PAIR={HUB_PAIR_DAY}, EDGE_HUB={EDGE_HUB_DAY}, MARKET_EDGE={MARKET_EDGE_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, HUB_PAIR={HUB_PAIR_DAY}, EDGE_HUB={EDGE_HUB_DAY}, MARKET_EDGE={MARKET_EDGE_DAY}, PLAY_FREE={PLAY_FREE_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -3464,11 +3477,21 @@ def _self_check() -> None:
     finally:
         os.unlink(fp82)
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82: ok')
+    # V17.4.84 每张票≤2场
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+        tf.write('【今日票面】\n稳=4元｜001胜+平×002主胜×003让胜｜2倍\n账本=过\n')
+        fp84 = tf.name
+    try:
+        assert any('二串一' in x['message'] for x in lint_edge_hub([], day='2026-10-21', filepath=fp84))
+        assert not any('二串一' in x['message'] for x in lint_edge_hub([], day='2026-10-20', filepath=fp84))
+    finally:
+        os.unlink(fp84)
+
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.83 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.84 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
