@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-20 20:00:00
+version_note: V17.4.86 候选三页必开（亲爱的问「考虑踢球风格了吗？需要写进skill吗」→选只改取证）：票面候选认真拆必开捷报教练分析/裁判分析/捷报猫（ego落_raw/style），01a写【三页取证】；捷报猫AI生成只摘事实标已核/待证；风格判断不加闸。lint STYLE_FETCH_DAY=2026-10-21 WARN + self-check。SKILL+取证速查+01a模板+防偷懒+使用+README+lint_draft。（注：上条 20:05 为估写时间戳）
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-20 20:05:00
 version_note: V17.4.85 每路翻倍（亲爱的点名「赚的超不过本金还有意思吗」→选翻倍版）：每张票每条命中路返还≥2倍本金（翻倍=过），取代稳>本金/博乘积≥4；CAUTION场可进非稳票但须复式罩冷门点名结果。lint DOUBLE_DAY=2026-10-21 ERROR + self-check。SKILL+output-template+防偷懒+使用+README+lint_draft。
 

@@ -60,6 +60,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     MARKET_EDGE_DAY = "2026-10-21"
     PLAY_FREE_DAY = "2026-10-21"
     DOUBLE_DAY = "2026-10-21"
+    STYLE_FETCH_DAY = "2026-10-21"
     SCORE_PACK_DAY = "2026-10-16"
     CANDIDATE_FIRST_DAY = "2026-10-13"
     PROCESS_FILE_DAY = "2026-10-15"
@@ -106,6 +107,7 @@ EDGE_HUB_DAY = "2026-10-20"  # V17.4.81：没边空仓账本=过；押客禁胆�
 MARKET_EDGE_DAY = "2026-10-21"  # V17.4.82/83：候选须【市场漏】行；没边只 WARN 记账
 PLAY_FREE_DAY = "2026-10-21"  # V17.4.84：每张票≥2场（禁单关）；玩法不限（复式/大博比分不再拦）
 DOUBLE_DAY = "2026-10-21"  # V17.4.85：每条命中路返还≥2倍本金（翻倍=过）；CAUTION场进票须复式
+STYLE_FETCH_DAY = "2026-10-21"  # V17.4.86：候选 01a 须【三页取证】（教练/裁判/捷报猫事实）
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
@@ -2378,6 +2380,13 @@ def lint_process_sidecar(sections: list[dict], day: str | None = None, filepath:
                     "match": f"01a-{num}",
                     "message": f"01a 缺 {title}（V17.4.72）",
                 })
+        if not (day and day < STYLE_FETCH_DAY) and "【三页取证】" not in side_txt:
+            warnings.append({
+                "rule": "lint_process_sidecar",
+                "severity": "WARN",
+                "match": f"01a-{num}",
+                "message": "01a 缺【三页取证】教练=｜裁判=｜猫=（只摘事实·标已核/待证；V17.4.86）",
+            })
     return warnings
 
 
@@ -2597,7 +2606,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
     print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, HUB_PAIR={HUB_PAIR_DAY}, EDGE_HUB={EDGE_HUB_DAY}, MARKET_EDGE={MARKET_EDGE_DAY}, PLAY_FREE={PLAY_FREE_DAY}, DOUBLE={DOUBLE_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, HUB_PAIR={HUB_PAIR_DAY}, EDGE_HUB={EDGE_HUB_DAY}, MARKET_EDGE={MARKET_EDGE_DAY}, PLAY_FREE={PLAY_FREE_DAY}, DOUBLE={DOUBLE_DAY}, STYLE_FETCH={STYLE_FETCH_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -3529,11 +3538,26 @@ def _self_check() -> None:
     finally:
         os.unlink(fp85)
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85: ok')
+    # V17.4.86 候选 01a 须【三页取证】
+    with tempfile.TemporaryDirectory() as td:
+        fp86 = os.path.join(td, '01-竞彩分析.md')
+        with open(fp86, 'w', encoding='utf-8') as f:
+            f.write('【票面候选】≤3｜010｜剔=其余\n过程=01a-认真拆-010.md\n')
+        side86 = os.path.join(td, '01a-认真拆-010.md')
+        base = '【近况比分表】\n【赛程前后】\n【排除因果】\n【反剧本因果】\n'
+        with open(side86, 'w', encoding='utf-8') as f:
+            f.write(base)
+        style = lambda d: [x for x in lint_process_sidecar([], day=d, filepath=fp86) if '三页取证' in x['message']]
+        assert len(style('2026-10-21')) == 1 and style('2026-10-20') == []
+        with open(side86, 'w', encoding='utf-8') as f:
+            f.write(base + '【三页取证】教练=法里奥利控节奏｜裁判=谢伯特偏松｜猫=贝德纳雷克回归(已核)\n')
+        assert style('2026-10-21') == []
+
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.85 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.86 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
