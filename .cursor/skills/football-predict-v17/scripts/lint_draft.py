@@ -57,6 +57,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     TICKET_STABLE_DAY = "2026-10-19"
     HUB_PAIR_DAY = "2026-10-20"
     EDGE_HUB_DAY = "2026-10-20"
+    MARKET_EDGE_DAY = "2026-10-21"
     SCORE_PACK_DAY = "2026-10-16"
     CANDIDATE_FIRST_DAY = "2026-10-13"
     PROCESS_FILE_DAY = "2026-10-15"
@@ -100,6 +101,7 @@ TICKET_CROSS_DAY = "2026-10-15"  # V17.4.76：过关禁同场两腿；稳让胜(
 TICKET_STABLE_DAY = "2026-10-19"  # V17.4.79：CAUTION禁稳；客热第二腿禁稳；让负进稳须净胜≥2
 HUB_PAIR_DAY = "2026-10-20"  # V17.4.80：低结构场≤1张票；硬排须【强弱对位】打得到=否
 EDGE_HUB_DAY = "2026-10-20"  # V17.4.81：没边空仓账本=过；押客禁胆；排主胜须主场=挡得住
+MARKET_EDGE_DAY = "2026-10-21"  # V17.4.82：候选须【市场漏】我估−隐含≥5
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
@@ -2505,6 +2507,59 @@ def lint_edge_hub(sections: list[dict], day: str | None = None, filepath: str | 
     return warnings
 
 
+def lint_market_edge(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
+    """V17.4.82：每个票面候选须【市场漏】隐含=NN%｜我估=NN%｜漏=…，我估−隐含≥5 才配当候选。"""
+    warnings = []
+    if (day and day < MARKET_EDGE_DAY) or not filepath:
+        return warnings
+    try:
+        content = open(filepath, encoding='utf-8').read()
+    except OSError:
+        return warnings
+    cand_m = re.search(r'【票面候选】([^\n]*)', content)
+    if not cand_m:
+        return warnings
+    for num in sorted(set(re.findall(r'(?<!\d)(\d{3})(?!\d)', cand_m.group(1)))):
+        blob = '\n'.join(
+            '\n'.join(s['lines']) for s in sections
+            if re.search(rf'(?<!\d){num}(?!\d)', s['header'])
+        )
+        em = re.search(r'【市场漏】[^\n]*', blob)
+        if not em:
+            warnings.append({
+                'rule': 'lint_market_edge', 'severity': 'ERROR', 'match': f'候选{num}',
+                'message': '候选须写【市场漏】押=…｜隐含=NN%｜我估=NN%｜漏=…（V17.4.82）',
+            })
+            continue
+        line = em.group(0)
+        imp = re.search(r'隐含\s*=\s*(\d+(?:\.\d+)?)\s*%', line)
+        est = re.search(r'我估\s*=\s*(\d+(?:\.\d+)?)\s*%', line)
+        gap = re.search(r'漏\s*=\s*([^｜|\n]*)', line)
+        if not (imp and est):
+            warnings.append({
+                'rule': 'lint_market_edge', 'severity': 'ERROR', 'match': f'候选{num}',
+                'message': '【市场漏】须有 隐含=NN% 与 我估=NN%（V17.4.82）',
+            })
+            continue
+        gap_txt = gap.group(1).strip() if gap else ''
+        if not gap_txt or re.fullmatch(r'无|缺|·|-', gap_txt):
+            warnings.append({
+                'rule': 'lint_market_edge', 'severity': 'ERROR', 'match': f'候选{num}',
+                'message': '漏=无 → 市场没漏，剔出候选（V17.4.82）',
+            })
+        elif float(est.group(1)) - float(imp.group(1)) < 5:
+            warnings.append({
+                'rule': 'lint_market_edge', 'severity': 'ERROR', 'match': f'候选{num}',
+                'message': f'我估{est.group(1)}%−隐含{imp.group(1)}%<5，没边，剔出候选（V17.4.82）',
+            })
+        elif re.search(r'伤停|缺阵|伤病', gap_txt) and not re.search(r'开盘后|临场|新|未反映|没动|未动', gap_txt):
+            warnings.append({
+                'rule': 'lint_market_edge', 'severity': 'WARN', 'match': f'候选{num}',
+                'message': '漏=公开伤停市场早已计价；须写开盘后/临场/赔率未反映（V17.4.82）',
+            })
+    return warnings
+
+
 def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     if day is None:
@@ -2512,7 +2567,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
     print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, HUB_PAIR={HUB_PAIR_DAY}, EDGE_HUB={EDGE_HUB_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, HUB_PAIR={HUB_PAIR_DAY}, EDGE_HUB={EDGE_HUB_DAY}, MARKET_EDGE={MARKET_EDGE_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -2677,6 +2732,15 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_edge_hub] ✓ 通过")
+
+        w_mkt = lint_market_edge(sections, day, filepath=filepath)
+        all_warnings.extend(w_mkt)
+        if w_mkt:
+            print(f"\n[lint_market_edge] 发现 {len(w_mkt)} 个问题:")
+            for item in w_mkt:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_market_edge] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)
@@ -3390,11 +3454,30 @@ def _self_check() -> None:
     finally:
         os.unlink(fp81b)
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81: ok')
+    # V17.4.82 候选须【市场漏】
+    mkt_sec = [{'header': '周二010 波尔图 vs 埃因霍温', 'lines': ['【取证清单】']}]
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+        tf.write('【票面候选】≤3｜010｜剔=其余\n')
+        fp82 = tf.name
+    try:
+        assert any('市场漏' in x['message'] for x in lint_market_edge(mkt_sec, day='2026-10-21', filepath=fp82))
+        assert lint_market_edge(mkt_sec, day='2026-10-20', filepath=fp82) == []
+        mkt_sec[0]['lines'].append('【市场漏】押=锁主｜隐含=66%｜我估=68%｜漏=客双后腰停赛开盘后才出')
+        assert any('没边' in x['message'] for x in lint_market_edge(mkt_sec, day='2026-10-21', filepath=fp82))
+        mkt_sec[0]['lines'][-1] = '【市场漏】押=锁主｜隐含=66%｜我估=75%｜漏=无'
+        assert any('漏=无' in x['message'] for x in lint_market_edge(mkt_sec, day='2026-10-21', filepath=fp82))
+        mkt_sec[0]['lines'][-1] = '【市场漏】押=锁主｜隐含=66%｜我估=75%｜漏=客主力中卫伤停'
+        assert [x['severity'] for x in lint_market_edge(mkt_sec, day='2026-10-21', filepath=fp82)] == ['WARN']
+        mkt_sec[0]['lines'][-1] = '【市场漏】押=锁主｜隐含=66%｜我估=75%｜漏=客双后腰停赛开盘后才出'
+        assert lint_market_edge(mkt_sec, day='2026-10-21', filepath=fp82) == []
+    finally:
+        os.unlink(fp82)
+
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.81 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.82 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
