@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-20 19:25:00
+version_note: V17.4.83 市场漏只记账（亲爱的点名·「算不过体彩市场，准确率高就行；5点门槛过不了几场」·改）：4.82 剔出候选/没漏空仓作废；选场回准确率；【市场漏】照写不挡票（缺行 ERROR，没边 WARN）；我估开赛前写死；30场复查没用就删。SKILL+防偷懒+使用+README+output-template+01a+lint_draft。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-20 17:40:00
 version_note: V17.4.82 候选须市场漏（亲爱的点名·「是不是挑选比赛的问题」·听你的改）：四日候选7/10为客热锁客中4/7≈市场隐含；每个票面候选须【市场漏】押/隐含/我估/漏，我估−隐含≥5，公开伤停不算漏，写不出剔=没漏。lint MARKET_EDGE_DAY=2026-10-21 ERROR(+伤停漏 WARN) + self-check。SKILL+防偷懒+使用+README+output-template+01a+lint_draft。
 

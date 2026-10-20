@@ -101,7 +101,7 @@ TICKET_CROSS_DAY = "2026-10-15"  # V17.4.76：过关禁同场两腿；稳让胜(
 TICKET_STABLE_DAY = "2026-10-19"  # V17.4.79：CAUTION禁稳；客热第二腿禁稳；让负进稳须净胜≥2
 HUB_PAIR_DAY = "2026-10-20"  # V17.4.80：低结构场≤1张票；硬排须【强弱对位】打得到=否
 EDGE_HUB_DAY = "2026-10-20"  # V17.4.81：没边空仓账本=过；押客禁胆；排主胜须主场=挡得住
-MARKET_EDGE_DAY = "2026-10-21"  # V17.4.82：候选须【市场漏】我估−隐含≥5
+MARKET_EDGE_DAY = "2026-10-21"  # V17.4.82/83：候选须【市场漏】行；没边只 WARN 记账
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
@@ -2508,7 +2508,7 @@ def lint_edge_hub(sections: list[dict], day: str | None = None, filepath: str | 
 
 
 def lint_market_edge(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
-    """V17.4.82：每个票面候选须【市场漏】隐含=NN%｜我估=NN%｜漏=…，我估−隐含≥5 才配当候选。"""
+    """V17.4.83：每个票面候选须【市场漏】隐含=NN%｜我估=NN%｜漏=…（缺行 ERROR）；没边只 WARN 记账，不挡票。"""
     warnings = []
     if (day and day < MARKET_EDGE_DAY) or not filepath:
         return warnings
@@ -2542,20 +2542,11 @@ def lint_market_edge(sections: list[dict], day: str | None = None, filepath: str
             })
             continue
         gap_txt = gap.group(1).strip() if gap else ''
-        if not gap_txt or re.fullmatch(r'无|缺|·|-', gap_txt):
-            warnings.append({
-                'rule': 'lint_market_edge', 'severity': 'ERROR', 'match': f'候选{num}',
-                'message': '漏=无 → 市场没漏，剔出候选（V17.4.82）',
-            })
-        elif float(est.group(1)) - float(imp.group(1)) < 5:
-            warnings.append({
-                'rule': 'lint_market_edge', 'severity': 'ERROR', 'match': f'候选{num}',
-                'message': f'我估{est.group(1)}%−隐含{imp.group(1)}%<5，没边，剔出候选（V17.4.82）',
-            })
-        elif re.search(r'伤停|缺阵|伤病', gap_txt) and not re.search(r'开盘后|临场|新|未反映|没动|未动', gap_txt):
+        if (not gap_txt or re.fullmatch(r'无|缺|·|-', gap_txt)
+                or float(est.group(1)) - float(imp.group(1)) < 5):
             warnings.append({
                 'rule': 'lint_market_edge', 'severity': 'WARN', 'match': f'候选{num}',
-                'message': '漏=公开伤停市场早已计价；须写开盘后/临场/赔率未反映（V17.4.82）',
+                'message': f'没边（我估{est.group(1)}%/隐含{imp.group(1)}%）只记账，不挡票（V17.4.83）',
             })
     return warnings
 
@@ -3462,11 +3453,11 @@ def _self_check() -> None:
     try:
         assert any('市场漏' in x['message'] for x in lint_market_edge(mkt_sec, day='2026-10-21', filepath=fp82))
         assert lint_market_edge(mkt_sec, day='2026-10-20', filepath=fp82) == []
-        mkt_sec[0]['lines'].append('【市场漏】押=锁主｜隐含=66%｜我估=68%｜漏=客双后腰停赛开盘后才出')
-        assert any('没边' in x['message'] for x in lint_market_edge(mkt_sec, day='2026-10-21', filepath=fp82))
+        mkt_sec[0]['lines'].append('【市场漏】押=锁主｜隐含=66%')
+        assert [x['severity'] for x in lint_market_edge(mkt_sec, day='2026-10-21', filepath=fp82)] == ['ERROR']
+        mkt_sec[0]['lines'][-1] = '【市场漏】押=锁主｜隐含=66%｜我估=68%｜漏=客双后腰停赛开盘后才出'
+        assert [x['severity'] for x in lint_market_edge(mkt_sec, day='2026-10-21', filepath=fp82)] == ['WARN']
         mkt_sec[0]['lines'][-1] = '【市场漏】押=锁主｜隐含=66%｜我估=75%｜漏=无'
-        assert any('漏=无' in x['message'] for x in lint_market_edge(mkt_sec, day='2026-10-21', filepath=fp82))
-        mkt_sec[0]['lines'][-1] = '【市场漏】押=锁主｜隐含=66%｜我估=75%｜漏=客主力中卫伤停'
         assert [x['severity'] for x in lint_market_edge(mkt_sec, day='2026-10-21', filepath=fp82)] == ['WARN']
         mkt_sec[0]['lines'][-1] = '【市场漏】押=锁主｜隐含=66%｜我估=75%｜漏=客双后腰停赛开盘后才出'
         assert lint_market_edge(mkt_sec, day='2026-10-21', filepath=fp82) == []
@@ -3477,7 +3468,7 @@ def _self_check() -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.82 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.83 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
