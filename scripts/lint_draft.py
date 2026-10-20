@@ -103,7 +103,7 @@ TICKET_STABLE_DAY = "2026-10-19"  # V17.4.79：CAUTION禁稳；客热第二腿�
 HUB_PAIR_DAY = "2026-10-20"  # V17.4.80：低结构场≤1张票；硬排须【强弱对位】打得到=否
 EDGE_HUB_DAY = "2026-10-20"  # V17.4.81：没边空仓账本=过；押客禁胆；排主胜须主场=挡得住
 MARKET_EDGE_DAY = "2026-10-21"  # V17.4.82/83：候选须【市场漏】行；没边只 WARN 记账
-PLAY_FREE_DAY = "2026-10-21"  # V17.4.84：每张票≤2场；玩法不限（复式/大博比分不再拦）
+PLAY_FREE_DAY = "2026-10-21"  # V17.4.84：每张票≥2场（禁单关）；玩法不限（复式/大博比分不再拦）
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
@@ -2509,13 +2509,15 @@ def lint_edge_hub(sections: list[dict], day: str | None = None, filepath: str | 
             })
     if not (day and day < PLAY_FREE_DAY):
         for line in lines:
+            if re.match(r'(?:稳|博|大博|机动|尖可选)\s*=\s*空', line):
+                continue
             parts = re.split(r'[｜|]', line)
             legs = parts[1] if len(parts) >= 2 else line
             nums = set(re.findall(r'(?<!\d)(\d{3})(?!\d)', legs))
-            if len(nums) > 2:
+            if len(nums) == 1:
                 warnings.append({
                     'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': line[:30],
-                    'message': f'一张票串了{len(nums)}场，最多二串一（V17.4.84）',
+                    'message': '一张票只有1场（单关），最少二串一（V17.4.84）',
                 })
     return warnings
 
@@ -3477,13 +3479,14 @@ def _self_check() -> None:
     finally:
         os.unlink(fp82)
 
-    # V17.4.84 每张票≤2场
+    # V17.4.84 每张票≥2场（禁单关；三串放行）
     with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
-        tf.write('【今日票面】\n稳=4元｜001胜+平×002主胜×003让胜｜2倍\n账本=过\n')
+        tf.write('【今日票面】\n稳=4元｜001胜+平×002主胜×003让胜｜2倍\n博=2元｜005让胜｜单关\n大博=空｜弃因=010主胜太低\n账本=过\n')
         fp84 = tf.name
     try:
-        assert any('二串一' in x['message'] for x in lint_edge_hub([], day='2026-10-21', filepath=fp84))
-        assert not any('二串一' in x['message'] for x in lint_edge_hub([], day='2026-10-20', filepath=fp84))
+        msgs = [x['message'] for x in lint_edge_hub([], day='2026-10-21', filepath=fp84) if '单关' in x['message']]
+        assert len(msgs) == 1
+        assert not any('单关' in x['message'] for x in lint_edge_hub([], day='2026-10-20', filepath=fp84))
     finally:
         os.unlink(fp84)
 

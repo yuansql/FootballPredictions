@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-20 19:50:00
+version_note: V17.4.84 修订（亲爱的改口「每张票最少两场串一起」→选至少两场）：撤「每张≤2场」上限，改为每张≥2场禁单关（lint ERROR），串数不封顶、默认优先两场。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-20 19:40:00
 version_note: V17.4.84 二串一封顶+玩法不限（亲爱的点名·「票面最多二串一，玩法不限，没有必要锁定玩法，稳可以赚钱就行」）：每张票≤2场；稳/博/大博玩法限定作废（胜+平复式可进、大博比分不再WARN）；稳只须命中返还>本金（乘积≥2.5作废）；其余稳闸/胆分散/同场禁串不动。lint PLAY_FREE_DAY=2026-10-21 + self-check。SKILL+防偷懒+使用+README+output-template+lint_draft。
 
