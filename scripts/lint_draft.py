@@ -27,6 +27,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
 21b. lint_fetch_channel — 认真拆须点名 analysisJs/接口优先/取证通道（4.78 WARN）
 22. lint_score_pack — 锁*/深让可锁/屠杀档已装箱须含净胜≥3（4.77 WARN）
 23. lint_hub_pairing — 低结构场最多进 1 张票；认真拆硬排须【强弱对位】打得到=否（4.80）
+24. lint_edge_hub — 没边空仓须账本=过；押客腿≤1张票；排主胜须主场=挡得住（4.81）
 
 用法：
     python3 lint_draft.py <草稿文件.md> [--day YYYY-MM-DD]   # 不传 --day：取路径中日期，无则今天
@@ -55,6 +56,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     TICKET_CROSS_DAY = "2026-10-15"
     TICKET_STABLE_DAY = "2026-10-19"
     HUB_PAIR_DAY = "2026-10-20"
+    EDGE_HUB_DAY = "2026-10-20"
     SCORE_PACK_DAY = "2026-10-16"
     CANDIDATE_FIRST_DAY = "2026-10-13"
     PROCESS_FILE_DAY = "2026-10-15"
@@ -97,6 +99,7 @@ TICKET16_DAY = "2026-10-13"  # V17.4.70：16元8+4+2+2；禁不败拧稳；禁�
 TICKET_CROSS_DAY = "2026-10-15"  # V17.4.76：过关禁同场两腿；稳让胜(主-N)须主推净胜≥N+1
 TICKET_STABLE_DAY = "2026-10-19"  # V17.4.79：CAUTION禁稳；客热第二腿禁稳；让负进稳须净胜≥2
 HUB_PAIR_DAY = "2026-10-20"  # V17.4.80：低结构场≤1张票；硬排须【强弱对位】打得到=否
+EDGE_HUB_DAY = "2026-10-20"  # V17.4.81：没边空仓账本=过；押客禁胆；排主胜须主场=挡得住
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
@@ -2432,6 +2435,76 @@ def lint_hub_pairing(sections: list[dict], day: str | None = None, filepath: str
     return warnings
 
 
+def _ticket_lines(content: str) -> list[str]:
+    return [m.group(0) for m in re.finditer(r'(?:稳|博|大博|机动|尖可选)\s*=[^\n]+', content)]
+
+
+def _away_match_nums(legs: str) -> set[str]:
+    """票腿里押客侧的场次编号（锁客/客胜/让负）。"""
+    return set(re.findall(r'(?<!\d)(\d{3})(?!\d)\s*(?:锁客\*?|客胜|让负)', legs))
+
+
+def lint_edge_hub(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
+    """V17.4.81：① 排主胜须主场=挡得住；② 押客腿最多进1张票；③ 非空仓须账本=过。"""
+    warnings = []
+    if day and day < EDGE_HUB_DAY:
+        return warnings
+    for sec in sections:
+        blob = '\n'.join(sec['lines'])
+        if '【取证清单】' not in blob:
+            continue
+        if not re.search(r'排除\s*=\s*主胜', blob):
+            continue
+        pm = re.search(r'【强弱对位】[^\n]*', blob)
+        if not pm:
+            warnings.append({
+                'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': sec['header'],
+                'message': '排除=主胜 须写【强弱对位】…｜主场=挡得住|挡不住（V17.4.81）',
+            })
+            continue
+        line = pm.group(0)
+        if re.search(r'主场\s*=\s*挡不住', line):
+            warnings.append({
+                'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': sec['header'],
+                'message': '主场=挡不住，禁排主胜；改暂缓或换侧（V17.4.81）',
+            })
+        elif not re.search(r'主场\s*=\s*挡得住', line):
+            warnings.append({
+                'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': sec['header'],
+                'message': '排除=主胜 须写 主场=挡得住|挡不住（V17.4.81）',
+            })
+    if not filepath:
+        return warnings
+    try:
+        content = open(filepath, encoding='utf-8').read()
+    except OSError:
+        return warnings
+    ticket_block = content
+    tm = re.search(r'【今日票面】([\s\S]*?)(?=\n【|\n## |\Z)', content)
+    if tm:
+        ticket_block = tm.group(0)
+    lines = _ticket_lines(ticket_block)
+    empty = bool(re.search(r'方案\s*=\s*空仓|空仓', ticket_block))
+    if lines and not empty and not re.search(r'账本\s*=\s*过', ticket_block):
+        warnings.append({
+            'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': '【今日票面】',
+            'message': '非空仓须写 账本=过（主路径盖本金）；盖不住→方案=空仓｜弃因=没边（V17.4.81）',
+        })
+    away_counts: dict[str, int] = {}
+    for line in lines:
+        parts = re.split(r'[｜|]', line)
+        legs = parts[1] if len(parts) >= 2 else line
+        for num in _away_match_nums(legs):
+            away_counts[num] = away_counts.get(num, 0) + 1
+    for num, n in away_counts.items():
+        if n >= 2:
+            warnings.append({
+                'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': f'{num}押客',
+                'message': f'押客腿{num}进了{n}张票，最多1张，禁当共同胆（V17.4.81）',
+            })
+    return warnings
+
+
 def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     if day is None:
@@ -2439,7 +2512,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
     print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, HUB_PAIR={HUB_PAIR_DAY}, EDGE_HUB={EDGE_HUB_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -2595,6 +2668,15 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_hub_pairing] ✓ 通过")
+
+        w_edge = lint_edge_hub(sections, day, filepath=filepath)
+        all_warnings.extend(w_edge)
+        if w_edge:
+            print(f"\n[lint_edge_hub] 发现 {len(w_edge)} 个问题:")
+            for item in w_edge:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_edge_hub] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)
@@ -3269,11 +3351,50 @@ def _self_check() -> None:
     finally:
         os.unlink(fp)
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80: ok')
+    # V17.4.81 没边空仓 + 押客禁胆 + 排主胜须主场
+    edge_sec = [{'header': '周一001 蒙 vs 卡', 'lines': [
+        '【取证清单】', '排除=主胜｜理由=主双中卫伤停',
+        '【强弱对位】被排方强项=主进攻｜对方弱项=客锋线｜打得到=否',
+    ]}]
+    assert any('主场' in x['message'] for x in lint_edge_hub(edge_sec, day='2026-10-20'))
+    edge_sec[0]['lines'][-1] = (
+        '【强弱对位】被排方强项=主进攻｜对方弱项=客锋线｜打得到=否｜主场=挡不住'
+    )
+    assert any('挡不住' in x['message'] for x in lint_edge_hub(edge_sec, day='2026-10-20'))
+    edge_sec[0]['lines'][-1] = (
+        '【强弱对位】被排方强项=主进攻｜对方弱项=客锋线｜打得到=否｜主场=挡得住'
+    )
+    assert lint_edge_hub(edge_sec, day='2026-10-20') == []
+    assert lint_edge_hub(edge_sec, day='2026-10-19') == []
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+        tf.write(
+            '【今日票面】\n'
+            '博=4元｜001让负 × 007让负\n'
+            '大博=2元｜001让负 × 002让胜\n'
+        )
+        fp81 = tf.name
+    try:
+        msgs = lint_edge_hub(edge_sec, day='2026-10-20', filepath=fp81)
+        assert any('账本' in x['message'] for x in msgs)
+        assert any('押客' in x['message'] or '共同胆' in x['message'] for x in msgs)
+    finally:
+        os.unlink(fp81)
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+        tf.write(
+            '【今日票面】\n'
+            '方案=空仓｜弃因=没边\n'
+        )
+        fp81b = tf.name
+    try:
+        assert lint_edge_hub(edge_sec, day='2026-10-20', filepath=fp81b) == []
+    finally:
+        os.unlink(fp81b)
+
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.77 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.81 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
