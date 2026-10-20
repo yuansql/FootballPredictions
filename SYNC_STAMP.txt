@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-20 20:05:00
+version_note: V17.4.85 每路翻倍（亲爱的点名「赚的超不过本金还有意思吗」→选翻倍版）：每张票每条命中路返还≥2倍本金（翻倍=过），取代稳>本金/博乘积≥4；CAUTION场可进非稳票但须复式罩冷门点名结果。lint DOUBLE_DAY=2026-10-21 ERROR + self-check。SKILL+output-template+防偷懒+使用+README+lint_draft。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-20 19:58:00
 version_note: V17.4.84 修订2（亲爱的点名「出的单子也可以买复式 12元的资金每天 玩法不限」）：每天资金默认12元（上限），形态自配、复式可买；原16元8+4+2+2默认作废。SKILL+output-template+防偷懒+使用+README+lint 文案。
 
