@@ -61,6 +61,7 @@ lint_draft.py — V17.4.56 日闸 lint 工具
     PLAY_FREE_DAY = "2026-10-21"
     DOUBLE_DAY = "2026-10-21"
     STYLE_FETCH_DAY = "2026-10-21"
+    LEDGER_SINGLE_DAY = "2026-10-21"
     SCORE_PACK_DAY = "2026-10-16"
     CANDIDATE_FIRST_DAY = "2026-10-13"
     PROCESS_FILE_DAY = "2026-10-15"
@@ -108,6 +109,7 @@ MARKET_EDGE_DAY = "2026-10-21"  # V17.4.82/83：候选须【市场漏】行；�
 PLAY_FREE_DAY = "2026-10-21"  # V17.4.84：每张票≥2场（禁单关）；玩法不限（复式/大博比分不再拦）
 DOUBLE_DAY = "2026-10-21"  # V17.4.85：每条命中路返还≥2倍本金（翻倍=过）；CAUTION场进票须复式
 STYLE_FETCH_DAY = "2026-10-21"  # V17.4.86：候选 01a 须【三页取证】（教练/裁判/捷报猫事实）
+LEDGER_SINGLE_DAY = "2026-10-21"  # V17.4.87：账本单关放行（SP≥2.0｜我估≥40%｜≤4元，非稳）；免 CAUTION 复式
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
@@ -2460,6 +2462,17 @@ def _away_match_nums(legs: str) -> set[str]:
     return set(re.findall(r'(?<!\d)(\d{3})(?!\d)\s*(?:锁客\*?|客胜|让负)', legs))
 
 
+def _ledger_single(line: str) -> bool:
+    """V17.4.87 账本单关：博/大博/机动=≤4元｜…单关…｜SP=≥2.0｜我估≥40%（稳不放行）。"""
+    if not re.match(r'(?:博|大博|机动)\s*=', line) or '单关' not in line:
+        return False
+    stake = re.match(r'(?:博|大博|机动)\s*=\s*(\d+)\s*元', line)
+    sp = re.search(r'SP\s*=\s*(\d+(?:\.\d+)?)', line)
+    est = re.search(r'我估\s*=?\s*(\d+)\s*%', line)
+    return bool(stake and sp and est and int(stake.group(1)) <= 4
+                and float(sp.group(1)) >= 2.0 and int(est.group(1)) >= 40)
+
+
 def lint_edge_hub(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
     """V17.4.81：① 排主胜须主场=挡得住；② 押客腿最多进1张票；③ 非空仓须账本=过。"""
     warnings = []
@@ -2518,6 +2531,7 @@ def lint_edge_hub(sections: list[dict], day: str | None = None, filepath: str | 
                 'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': f'{num}押客',
                 'message': f'押客腿{num}进了{n}张票，最多1张，禁当共同胆（V17.4.81）',
             })
+    single_ok = (lambda l: False) if (day and day < LEDGER_SINGLE_DAY) else _ledger_single
     if not (day and day < PLAY_FREE_DAY):
         for line in lines:
             if re.match(r'(?:稳|博|大博|机动|尖可选)\s*=\s*空', line):
@@ -2525,10 +2539,10 @@ def lint_edge_hub(sections: list[dict], day: str | None = None, filepath: str | 
             parts = re.split(r'[｜|]', line)
             legs = parts[1] if len(parts) >= 2 else line
             nums = set(re.findall(r'(?<!\d)(\d{3})(?!\d)', legs))
-            if len(nums) == 1:
+            if len(nums) == 1 and not single_ok(line):
                 warnings.append({
                     'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': line[:30],
-                    'message': '一张票只有1场（单关），最少二串一（V17.4.84）',
+                    'message': '一张票只有1场（单关），最少二串一（V17.4.84）；账本单关须 博/大博/机动=≤4元｜单关｜SP=≥2.0｜我估≥40%（V17.4.87）',
                 })
     if not (day and day < DOUBLE_DAY):
         live = [l for l in lines if not re.match(r'(?:稳|博|大博|机动|尖可选)\s*=\s*空', l)]
@@ -2543,6 +2557,8 @@ def lint_edge_hub(sections: list[dict], day: str | None = None, filepath: str | 
             if nm and re.search(r'动作\s*=\s*CAUTION|弱置信\s*=\s*是', '\n'.join(sec['lines'])):
                 caution.add(nm.group(1))
         for line in live:
+            if single_ok(line):
+                continue
             parts = re.split(r'[｜|]', line)
             legs = parts[1] if len(parts) >= 2 else line
             for leg in re.split(r'[×xX*]', legs):
@@ -3553,11 +3569,28 @@ def _self_check() -> None:
             f.write(base + '【三页取证】教练=法里奥利控节奏｜裁判=谢伯特偏松｜猫=贝德纳雷克回归(已核)\n')
         assert style('2026-10-21') == []
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86: ok')
+    # V17.4.87 账本单关：SP≥2.0｜我估≥40%｜≤4元 放行（免 CAUTION 复式）；不达标/稳仍拦
+    s_sec = [{'header': '周三010 拜仁 vs 阿森纳', 'lines': ['动作=CAUTION｜弱置信=是']}]
+    def single87(ticket_line, d='2026-10-21'):
+        with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+            tf.write(f'【今日票面】\n{ticket_line}\n账本=过｜翻倍=过\n')
+            fp = tf.name
+        try:
+            return [x['message'] for x in lint_edge_hub(s_sec, day=d, filepath=fp)]
+        finally:
+            os.unlink(fp)
+    assert single87('博=4元｜010拜仁胜 单关｜SP=2.03｜我估44%') == []
+    assert any('单关' in m for m in single87('博=4元｜010拜仁胜 单关｜SP=1.91｜我估45%'))
+    assert any('单关' in m for m in single87('博=4元｜010拜仁胜 单关｜SP=2.03｜我估35%'))
+    assert any('单关' in m for m in single87('博=6元｜010拜仁胜 单关｜SP=2.03｜我估44%'))
+    assert any('单关' in m for m in single87('稳=4元｜010拜仁胜 单关｜SP=2.03｜我估44%'))
+    assert any('复式' in m for m in single87('博=4元｜010拜仁胜×001主胜｜分注'))
+
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.86 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.87 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
