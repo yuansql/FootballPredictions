@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-22 18:10:00
+version_note: V17.4.89 账本改回二串一（亲爱的「不需要单关，改回2串一」）：每晚≤1张二串一、翻倍=过、4元；单关不默认（体彩开不开都不靠）。4.87单关放行仍留lint。SKILL+防偷懒+使用+README+账本口径。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-22 09:15:00
 version_note: V17.4.88 伤停已核口径（亲爱的问「写到记忆里和写到skill哪个强」→选写进skill·冻结期修错）：伤停标已核只认本场缺阵名单/官方消息/正式首发；上一场没首发=待证；预计首发与缺阵打架两边都写待证。依据10-21 010诺伊尔误判缺阵。不加lint。SKILL+取证速查+01a模板+防偷懒+使用+README+lint文案。
 
