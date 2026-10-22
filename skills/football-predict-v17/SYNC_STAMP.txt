@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-22 09:15:00
+version_note: V17.4.88 伤停已核口径（亲爱的问「写到记忆里和写到skill哪个强」→选写进skill·冻结期修错）：伤停标已核只认本场缺阵名单/官方消息/正式首发；上一场没首发=待证；预计首发与缺阵打架两边都写待证。依据10-21 010诺伊尔误判缺阵。不加lint。SKILL+取证速查+01a模板+防偷懒+使用+README+lint文案。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-21 19:40:00
 version_note: V17.4.87 账本单关放行（亲爱的点名「改 skill 到 V17.4.87，今晚出 4 元拜仁胜」）：资金走 @数据/账本.md；每晚≤1张单关、SP≥2.0、我估≥40%取最高格、≤4元、稳不放行；4.84 最少二串一与 4.85 CAUTION 复式对达标单关放行，不达标仍 ERROR。lint LEDGER_SINGLE_DAY=2026-10-21 + self-check single87。SKILL+防偷懒+使用+README+lint_draft。
 

@@ -3590,7 +3590,7 @@ def _self_check() -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.87 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.88 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
