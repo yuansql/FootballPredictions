@@ -111,6 +111,7 @@ DOUBLE_DAY = "2026-10-21"  # V17.4.85：每条命中路返还≥2倍本金（翻
 STYLE_FETCH_DAY = "2026-10-21"  # V17.4.86：候选 01a 须【三页取证】（教练/裁判/捷报猫事实）
 LEDGER_SINGLE_DAY = "2026-10-21"  # V17.4.87：账本单关放行（SP≥2.0｜我估≥40%｜≤4元，非稳）；免 CAUTION 复式
 LEDGER_DUAL_DAY = "2026-10-22"  # V17.4.90：账本每天12元稳+博；候选/认真拆≤4
+PLAY_MAP_DAY = "2026-10-22"  # V17.4.91：玩法不限落地；不败进稳禁倾向单选；票行只扫【今日票面】
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
@@ -1747,15 +1748,58 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                     'message': '禁止胜+平/负+平复式进票（V17.4.70）',
                 })
                 break
-        for m in re.finditer(r'稳\s*=[^\n]+', body):
+        ticket_blk = _today_ticket_block(body) or body
+        for m in re.finditer(r'稳\s*=[^\n]+', ticket_blk):
             if re.search(r'主不败|客不败', m.group(0)):
                 warnings.append({
                     'rule': 'lint_today_ticket',
                     'severity': 'ERROR',
                     'match': filepath,
-                    'message': '稳禁止不败当腿；不败改让胜/让负或降档（V17.4.70）',
+                    'message': '稳禁止写「主不败/客不败」当腿；改胜/平或让平（V17.4.91/4.70）',
                 })
                 break
+        # V17.4.91：方向=不败 却把主胜/客胜单选塞进稳
+        if not (day and day < PLAY_MAP_DAY) and sections:
+            dir_by_num: dict[str, str] = {}
+            for sec in sections:
+                nm = re.search(r'(?:周[一二三四五六日天])?(\d{3})', sec['header'])
+                if not nm:
+                    continue
+                blob = '\n'.join(sec['lines'])
+                dm = re.search(r'方向\s*=\s*(主不败|客不败|锁主|锁客|锁平)', blob)
+                if dm:
+                    dir_by_num[nm.group(1)] = dm.group(1)
+            for m in re.finditer(r'稳\s*=[^\n]+', ticket_blk):
+                line = m.group(0)
+                if re.match(r'稳\s*=\s*空', line):
+                    continue
+                twist = None
+                for lm in re.finditer(r'(?<!\d)(\d{3})(?!\d)\s*(?:锁主\*?|主胜)(?!\s*/\s*平)', line):
+                    num = lm.group(1)
+                    if re.search(rf'(?<!\d){num}(?!\d)\s*胜\s*/\s*平', line):
+                        continue
+                    if dir_by_num.get(num) == '主不败':
+                        twist = num
+                        break
+                if not twist:
+                    for lm in re.finditer(r'(?<!\d)(\d{3})(?!\d)\s*(?:锁客\*?|客胜)(?!\s*/\s*平)', line):
+                        num = lm.group(1)
+                        if re.search(rf'(?<!\d){num}(?!\d)\s*(?:负|客)\s*/\s*平', line):
+                            continue
+                        if dir_by_num.get(num) == '客不败':
+                            twist = num
+                            break
+                if twist:
+                    warnings.append({
+                        'rule': 'lint_today_ticket',
+                        'severity': 'ERROR',
+                        'match': filepath,
+                        'message': (
+                            f'稳腿{twist}方向=不败却写倾向单选；'
+                            '改胜/平或小胜让平（V17.4.91）'
+                        ),
+                    })
+                    break
     # V17.4.49 临场闸：票空仓免写；非空仓真下才须【临场闸】。
     # 废止「待临场确认」。XI=未确认 → 仅撤腿|降观望；已确认才保留。
     if not (day and day < LINEUP_GATE_DAY):
@@ -2434,7 +2478,8 @@ def lint_hub_pairing(sections: list[dict], day: str | None = None, filepath: str
     except OSError:
         return warnings
     tickets = []
-    for tm in re.finditer(r'(?:稳|博|大博|机动|尖可选)\s*=[^\n]+', content):
+    ticket_blk = _today_ticket_block(content) or content
+    for tm in re.finditer(r'(?:稳|博|大博|机动|尖可选)\s*=[^\n]+', ticket_blk):
         parts = re.split(r'[｜|]', tm.group(0))
         legs = parts[1] if len(parts) >= 2 else tm.group(0)
         nums = set(re.findall(r'(?<!\d)(\d{3})(?!\d)', legs))
@@ -2460,8 +2505,15 @@ def lint_hub_pairing(sections: list[dict], day: str | None = None, filepath: str
     return warnings
 
 
+def _today_ticket_block(content: str) -> str:
+    """只取【今日票面】段，避免文首叙述里的 稳=/博= 假阳性（V17.4.91）。"""
+    m = re.search(r'【今日票面】[\s\S]*?(?=\n【(?!今日票面)|$)', content)
+    return m.group(0) if m else ''
+
+
 def _ticket_lines(content: str) -> list[str]:
-    return [m.group(0) for m in re.finditer(r'(?:稳|博|大博|机动|尖可选)\s*=[^\n]+', content)]
+    blk = _today_ticket_block(content) or content
+    return [m.group(0) for m in re.finditer(r'(?:稳|博|大博|机动|尖可选)\s*=[^\n]+', blk)]
 
 
 def _away_match_nums(legs: str) -> set[str]:
@@ -3593,11 +3645,45 @@ def _self_check() -> None:
     assert any('单关' in m for m in single87('稳=4元｜010拜仁胜 单关｜SP=2.03｜我估44%'))
     assert any('复式' in m for m in single87('博=4元｜010拜仁胜×001主胜｜分注'))
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87: ok')
+    # V17.4.91：不败拧主胜单选进稳 → ERROR；【今日票面】外叙述不算票
+    with tempfile.TemporaryDirectory() as td91:
+        fp91 = os.path.join(td91, '01-竞彩分析.md')
+        with open(fp91, 'w', encoding='utf-8') as f:
+            f.write(
+                '交卷模式=下注单\n【票面候选】≤3｜003｜012｜剔=叙述里稳=003主胜别当真\n'
+                '## 周四003 甲 vs 乙\n方向=主不败｜倾向=主胜\n动作=PROCEED｜情报档=充足\n'
+                '现SP=1.36/4.60/5.65\n'
+                '## 周四012 丙 vs 丁\n方向=主不败｜倾向=主胜\n动作=PROCEED｜情报档=充足\n'
+                '现SP=1.90/3.45/3.20\n'
+                '【今日票面】\n预算=12元\n'
+                '稳=8元｜003主胜×012主胜｜1注×4倍｜翻倍=过\n'
+                '博=空\n账本=过｜翻倍=过\n'
+            )
+        bad91 = lint_today_ticket(
+            parse_sections(fp91), day='2026-10-22', filepath=fp91,
+        )
+        assert any('不败' in w.get('message', '') for w in bad91), bad91
+        with open(fp91, 'w', encoding='utf-8') as f:
+            f.write(
+                '交卷模式=下注单\n【票面候选】≤3｜003｜012\n'
+                '## 周四003 甲 vs 乙\n方向=主不败｜倾向=主胜\n动作=PROCEED｜情报档=充足\n'
+                '现SP=1.36/4.60/5.65\n'
+                '## 周四012 丙 vs 丁\n方向=主不败｜倾向=主胜\n动作=PROCEED｜情报档=充足\n'
+                '现SP=1.90/3.45/3.20\n'
+                '【今日票面】\n预算=12元\n'
+                '稳=8元｜003让平(主-1)×012胜/平｜分注4+4｜翻倍=过\n'
+                '博=空\n账本=过｜翻倍=过\n'
+            )
+        ok91 = lint_today_ticket(
+            parse_sections(fp91), day='2026-10-22', filepath=fp91,
+        )
+        assert not any('不败' in w.get('message', '') and w.get('severity') == 'ERROR' for w in ok91), ok91
+
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87 + play91: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.90 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.91 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')

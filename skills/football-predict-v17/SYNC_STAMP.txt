@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-22 18:25:00
+version_note: V17.4.91 玩法不限落地（亲爱的「买票玩法不限的」→「改」）：出票按剧本选玩法；不败进稳须胜/平或小胜让平；禁倾向单选拧稳；禁默认全场胜平负单选凑串；lint 只扫【今日票面】。lint PLAY_MAP_DAY。SKILL+防偷懒+使用+README+output-template+lint_draft。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-22 18:20:00
 version_note: V17.4.90 账本12元稳+博（亲爱的「每天12元一张稳一张博玩法不限怎么忘了」）：每天12元、稳+博各一张二串一、玩法不限、默认8+4、候选/认真拆≤4、禁共用胆、单关不默认。lint LEDGER_DUAL_DAY。SKILL+防偷懒+使用+README+lint_draft。
 
