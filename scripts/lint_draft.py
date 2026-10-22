@@ -110,6 +110,7 @@ PLAY_FREE_DAY = "2026-10-21"  # V17.4.84：每张票≥2场（禁单关）；玩
 DOUBLE_DAY = "2026-10-21"  # V17.4.85：每条命中路返还≥2倍本金（翻倍=过）；CAUTION场进票须复式
 STYLE_FETCH_DAY = "2026-10-21"  # V17.4.86：候选 01a 须【三页取证】（教练/裁判/捷报猫事实）
 LEDGER_SINGLE_DAY = "2026-10-21"  # V17.4.87：账本单关放行（SP≥2.0｜我估≥40%｜≤4元，非稳）；免 CAUTION 复式
+LEDGER_DUAL_DAY = "2026-10-22"  # V17.4.90：账本每天12元稳+博；候选/认真拆≤4
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
@@ -919,14 +920,16 @@ def lint_delivery_pack(sections: list[dict], day: str | None = None, filepath: s
         blob = '\n'.join(sec['lines'])
         if re.search(r'###?\s*取证清单|【取证清单】', blob):
             deep_headers.append(sec['header'])
-    if len(deep_headers) > 3:
+    deep_cap = 4 if (day and day >= LEDGER_DUAL_DAY) else 3
+    if len(deep_headers) > deep_cap:
         warnings.append({
             'rule': 'lint_delivery_pack',
             'severity': 'ERROR',
             'match': '全文',
             'message': (
-                f'重点认真拆 {len(deep_headers)} 场（含取证清单）>3；'
-                f'须砍到≤3 或亲爱的点名破例 (V17.4.50)：'
+                f'重点认真拆 {len(deep_headers)} 场（含取证清单）>{deep_cap}；'
+                f'须砍到≤{deep_cap} 或亲爱的点名破例 '
+                f'({"V17.4.90 稳+博可≤4" if deep_cap == 4 else "V17.4.50"}):'
                 + '；'.join(h[:24] for h in deep_headers[:6])
             ),
         })
@@ -1640,12 +1643,16 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                     'match': filepath,
                     'message': '【票面候选】须含三位场次编号或写无｜研究板（V17.4.71）',
                 })
-            if len(candidates) > 3:
+            cand_cap = 4 if (day and day >= LEDGER_DUAL_DAY) else 3
+            if len(candidates) > cand_cap:
                 warnings.append({
                     'rule': 'lint_today_ticket',
                     'severity': 'ERROR',
                     'match': filepath,
-                    'message': '【票面候选】最多3场（V17.4.71）',
+                    'message': (
+                        f'【票面候选】最多{cand_cap}场'
+                        f'（{"V17.4.90 稳+博可≤4" if cand_cap == 4 else "V17.4.71"}）'
+                    ),
                 })
             deep_m = re.search(r'认真拆\s*=\s*([^\n]+)', content)
             if deep_m and candidates:
@@ -3590,7 +3597,7 @@ def _self_check() -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.89 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.90 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')

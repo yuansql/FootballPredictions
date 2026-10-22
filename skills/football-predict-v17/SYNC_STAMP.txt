@@ -1,6 +1,10 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-22 18:20:00
+version_note: V17.4.90 账本12元稳+博（亲爱的「每天12元一张稳一张博玩法不限怎么忘了」）：每天12元、稳+博各一张二串一、玩法不限、默认8+4、候选/认真拆≤4、禁共用胆、单关不默认。lint LEDGER_DUAL_DAY。SKILL+防偷懒+使用+README+lint_draft。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-22 18:10:00
-version_note: V17.4.89 账本改回二串一（亲爱的「不需要单关，改回2串一」）：每晚≤1张二串一、翻倍=过、4元；单关不默认（体彩开不开都不靠）。4.87单关放行仍留lint。SKILL+防偷懒+使用+README+账本口径。
+version_note: V17.4.89 账本改回二串一（亲爱的「不需要单关，改回2串一」）：每晚≤1张二串一、翻倍=过、4元；单关不默认。已被4.90覆盖。
 
 # football-predict-v17 sync stamp
 synced_at: 2026-10-22 09:15:00
