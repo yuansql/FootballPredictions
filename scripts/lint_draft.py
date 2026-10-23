@@ -2471,7 +2471,7 @@ def lint_hub_pairing(sections: list[dict], day: str | None = None, filepath: str
                 warnings.append({
                     'rule': 'lint_hub_pairing', 'severity': 'ERROR', 'match': sec['header'],
                     'message': (
-                        f'排除={em.group(1)} 靠伤停须 缺几场=新缺（核心在上一场阵容）；'
+                        f'排除={em.group(1)} 【伤停排除】须 缺几场=新缺（核心在上一场阵容）；'
                         '旧缺/资格限制/待证改近况理由或暂缓（V17.4.93）'
                     ),
                 })
