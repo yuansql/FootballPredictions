@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-23 09:35:00
+version_note: V17.4.95 稳只须回本（亲爱的「稳票会经常空着，中奖概率大可以试一下，玩法不限」→「至少不亏本就行」）：稳票门槛由翻倍改为 回本=过（每条命中路返还≥该票本金），写 中率≈NN%（不设硬线）；博仍翻倍=过；过不了回本→稳=空｜弃因=回本不过。lint STABLE_NOLOSE_DAY。SKILL+output-template+防偷懒+使用+README+lint_draft。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-23 09:40:00
 version_note: V17.4.94 纠正4.91（亲爱的选「让平只进博」）：让平只赢1球才中≈24%，进稳后稳票≈17%与博无异 → 让平禁进稳；不败进稳只许胜/平复式；过不了翻倍→稳=空，禁为过翻倍塞让平。lint RANGPING_STABLE_DAY。SKILL+output-template+防偷懒+使用+README+lint_draft。
 

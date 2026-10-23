@@ -108,6 +108,7 @@ EDGE_HUB_DAY = "2026-10-20"  # V17.4.81：没边空仓账本=过；押客禁胆�
 MARKET_EDGE_DAY = "2026-10-21"  # V17.4.82/83：候选须【市场漏】行；没边只 WARN 记账
 PLAY_FREE_DAY = "2026-10-21"  # V17.4.84：每张票≥2场（禁单关）；玩法不限（复式/大博比分不再拦）
 DOUBLE_DAY = "2026-10-21"  # V17.4.85：每条命中路返还≥2倍本金（翻倍=过）；CAUTION场进票须复式
+STABLE_NOLOSE_DAY = "2026-10-23"  # V17.4.95：稳票只须 回本=过（每条命中路≥本金）；博仍翻倍
 STYLE_FETCH_DAY = "2026-10-21"  # V17.4.86：候选 01a 须【三页取证】（教练/裁判/捷报猫事实）
 LEDGER_SINGLE_DAY = "2026-10-21"  # V17.4.87：账本单关放行（SP≥2.0｜我估≥40%｜≤4元，非稳）；免 CAUTION 复式
 LEDGER_DUAL_DAY = "2026-10-22"  # V17.4.90：账本每天12元稳+博；候选/认真拆≤4
@@ -1810,7 +1811,7 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                         'rule': 'lint_today_ticket',
                         'severity': 'ERROR',
                         'match': filepath,
-                        'message': '让平禁进稳（只赢1球才中≈24%）；让平只许博/大博，稳过不了翻倍就空（V17.4.94）',
+                        'message': '让平禁进稳（只赢1球才中≈24%）；让平只许博/大博，稳过不了回本就空（V17.4.94/95）',
                     })
                     break
     # V17.4.49 临场闸：票空仓免写；非空仓真下才须【临场闸】。
@@ -2644,10 +2645,18 @@ def lint_edge_hub(sections: list[dict], day: str | None = None, filepath: str | 
                 })
     if not (day and day < DOUBLE_DAY):
         live = [l for l in lines if not re.match(r'(?:稳|博|大博|机动|尖可选)\s*=\s*空', l)]
-        if live and not empty and not re.search(r'翻倍\s*=\s*过', ticket_block):
+        nolose = not (day and day < STABLE_NOLOSE_DAY)
+        stable_live = [l for l in live if nolose and re.match(r'稳\s*=', l)]
+        for line in stable_live:
+            if not re.search(r'回本\s*=\s*过', line):
+                warnings.append({
+                    'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': line[:30],
+                    'message': '稳票须写 回本=过（每条命中路返还≥该票本金，不要求翻倍；V17.4.95）',
+                })
+        if [l for l in live if l not in stable_live] and not empty and not re.search(r'翻倍\s*=\s*过', ticket_block):
             warnings.append({
                 'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': '【今日票面】',
-                'message': '非空仓须写 翻倍=过（每条命中路返还≥2倍该票本金；V17.4.85）',
+                'message': '非空仓须写 翻倍=过（每条命中路返还≥2倍该票本金；V17.4.85；4.95 起稳票改 回本=过）',
             })
         caution = set()
         for sec in sections:
@@ -3748,8 +3757,18 @@ def _self_check() -> None:
                 '博=4元｜003让平(主-1)×012胜/平｜分注2+2｜翻倍=过\n账本=过｜翻倍=过\n'
             )
         assert rp('2026-10-23') == []
+        # V17.4.95：稳只须 回本=过；博仍须 翻倍=过
+        def nl(body, d='2026-10-23'):
+            with open(fp91, 'w', encoding='utf-8') as f:
+                f.write('交卷模式=下注单\n【今日票面】\n预算=12元\n' + body)
+            return [w.get('message', '') for w in lint_edge_hub(parse_sections(fp91), day=d, filepath=fp91)
+                    if w.get('severity') == 'ERROR' and ('回本' in w.get('message', '') or '翻倍' in w.get('message', ''))]
+        assert not nl('稳=8元｜003主胜×012胜/平｜分注6+2｜回本=过\n博=空\n账本=过\n')
+        assert any('回本' in m for m in nl('稳=8元｜003主胜×012胜/平｜分注6+2\n博=空\n账本=过\n'))
+        assert any('翻倍' in m for m in nl('稳=8元｜003主胜×012胜/平｜回本=过\n博=4元｜005胜×007胜｜1注×2倍\n账本=过\n'))
+        assert not nl('稳=8元｜003主胜×012胜/平｜翻倍=过\n博=空\n账本=过｜翻倍=过\n', d='2026-10-22')
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87 + play91 + injury92 + fresh93 + rangping94: ok')
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87 + play91 + injury92 + fresh93 + rangping94 + nolose95: ok')
 
 
 if __name__ == "__main__":
