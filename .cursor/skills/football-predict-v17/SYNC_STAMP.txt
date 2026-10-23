@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-23 09:30:00
+version_note: V17.4.93 伤停排除须新缺（亲爱的「先查4场是不是旧缺，≥2场再加」→查得4/4旧缺）：【伤停排除】加缺几场=新缺；核心不在上一场阵容=已缺、资格限制=旧缺，不能当排除理由。lint INJURY_CORE_DAY。SKILL+取证速查+output-template+防偷懒+使用+README+lint_draft。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-23 09:15:00
 version_note: V17.4.92 伤停排除（亲爱的「直接改：名单长只能暂缓」）：理由靠伤停排主胜|客胜须【伤停排除】核心缺=｜打不了=，写不出只能暂缓；依据同类穿4场（10-20 010、10-21 005/011、10-22 003）。lint INJURY_CORE_DAY=2026-10-23。SKILL+output-template+防偷懒+使用+README+lint_draft。
 

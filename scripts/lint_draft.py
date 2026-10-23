@@ -2453,7 +2453,7 @@ def lint_hub_pairing(sections: list[dict], day: str | None = None, filepath: str
         for sec in sections:
             blob = '\n'.join(sec['lines'])
             em = re.search(r'排除\s*=\s*(主胜|客胜)\s*[｜|]\s*理由\s*=([^｜|\n]*)', blob)
-            if not em or not re.search(r'伤|缺阵|名单', em.group(2)):
+            if not em or not re.search(r'伤|缺阵|名单|资格', em.group(2)):
                 continue
             cm = re.search(r'【伤停排除】[^\n]*', blob)
             ok = cm and all(
@@ -2465,6 +2465,14 @@ def lint_hub_pairing(sections: list[dict], day: str | None = None, filepath: str
                     'message': (
                         f'排除={em.group(1)} 理由靠伤停：须写【伤停排除】核心缺=…｜打不了=…，'
                         '写不出改暂缓（V17.4.92）'
+                    ),
+                })
+            elif not re.search(r'缺几场\s*=\s*新缺', cm.group(0)):
+                warnings.append({
+                    'rule': 'lint_hub_pairing', 'severity': 'ERROR', 'match': sec['header'],
+                    'message': (
+                        f'排除={em.group(1)} 靠伤停须 缺几场=新缺（核心在上一场阵容）；'
+                        '旧缺/资格限制/待证改近况理由或暂缓（V17.4.93）'
                     ),
                 })
     for sec in sections:
@@ -3545,7 +3553,11 @@ def _self_check() -> None:
         [{'header': '周四003 甲 vs 乙', 'lines': ['排除=客胜｜理由=客伤停重｜质疑=无'] + extra}],
         day='2026-10-23') if '伤停排除' in x['message']]
     assert inj([]) and inj(['【伤停排除】核心缺=缺｜打不了=无'])
-    assert inj(['【伤停排除】核心缺=双中卫+门将｜打不了=守不住定位球']) == []
+    assert inj(['【伤停排除】核心缺=双中卫+门将｜打不了=守不住定位球｜缺几场=新缺']) == []
+    # V17.4.93 旧缺/待证 → 不能当排除理由
+    assert inj(['【伤停排除】核心缺=双中卫｜打不了=守不住定位球｜缺几场=已缺3场'])
+    assert inj(['【伤停排除】核心缺=双中卫｜打不了=守不住定位球｜缺几场=待证'])
+    assert inj(['【伤停排除】核心缺=双中卫｜打不了=守不住定位球'])
     assert [x for x in lint_hub_pairing(
         [{'header': '周四003 甲 vs 乙', 'lines': ['排除=客胜｜理由=客伤停重']}], day='2026-10-22'
     ) if '伤停排除' in x['message']] == []
@@ -3711,11 +3723,11 @@ def _self_check() -> None:
         )
         assert not any('不败' in w.get('message', '') and w.get('severity') == 'ERROR' for w in ok91), ok91
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87 + play91 + injury92: ok')
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87 + play91 + injury92 + fresh93: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.92 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.93 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
