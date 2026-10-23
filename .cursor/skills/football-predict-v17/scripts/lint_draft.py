@@ -112,6 +112,7 @@ STYLE_FETCH_DAY = "2026-10-21"  # V17.4.86：候选 01a 须【三页取证】（
 LEDGER_SINGLE_DAY = "2026-10-21"  # V17.4.87：账本单关放行（SP≥2.0｜我估≥40%｜≤4元，非稳）；免 CAUTION 复式
 LEDGER_DUAL_DAY = "2026-10-22"  # V17.4.90：账本每天12元稳+博；候选/认真拆≤4
 PLAY_MAP_DAY = "2026-10-22"  # V17.4.91：玩法不限落地；不败进稳禁倾向单选；票行只扫【今日票面】
+INJURY_CORE_DAY = "2026-10-23"  # V17.4.92：伤停理由排胜负边须【伤停排除】核心缺=｜打不了=；否则暂缓
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
@@ -2448,6 +2449,24 @@ def lint_hub_pairing(sections: list[dict], day: str | None = None, filepath: str
     warnings = []
     if day and day < HUB_PAIR_DAY:
         return warnings
+    if not (day and day < INJURY_CORE_DAY):
+        for sec in sections:
+            blob = '\n'.join(sec['lines'])
+            em = re.search(r'排除\s*=\s*(主胜|客胜)\s*[｜|]\s*理由\s*=([^｜|\n]*)', blob)
+            if not em or not re.search(r'伤|缺阵|名单', em.group(2)):
+                continue
+            cm = re.search(r'【伤停排除】[^\n]*', blob)
+            ok = cm and all(
+                re.search(rf'{k}\s*=\s*(?!缺|无|—|-)[^｜|\n]+', cm.group(0)) for k in ('核心缺', '打不了')
+            )
+            if not ok:
+                warnings.append({
+                    'rule': 'lint_hub_pairing', 'severity': 'ERROR', 'match': sec['header'],
+                    'message': (
+                        f'排除={em.group(1)} 理由靠伤停：须写【伤停排除】核心缺=…｜打不了=…，'
+                        '写不出改暂缓（V17.4.92）'
+                    ),
+                })
     for sec in sections:
         blob = '\n'.join(sec['lines'])
         if '【取证清单】' not in blob:
@@ -3520,6 +3539,19 @@ def _self_check() -> None:
     hub_sec[0]['lines'].append('【强弱对位】被排方强项=主进攻｜对方弱项=客虚高防守｜打得到=是')
     assert any('禁排' in x['message'] for x in lint_hub_pairing(hub_sec, day='2026-10-20'))
     assert lint_hub_pairing(hub_sec, day='2026-10-19') == []
+
+    # V17.4.92 伤停排除须核心缺+打不了
+    inj = lambda extra: [x['message'] for x in lint_hub_pairing(
+        [{'header': '周四003 甲 vs 乙', 'lines': ['排除=客胜｜理由=客伤停重｜质疑=无'] + extra}],
+        day='2026-10-23') if '伤停排除' in x['message']]
+    assert inj([]) and inj(['【伤停排除】核心缺=缺｜打不了=无'])
+    assert inj(['【伤停排除】核心缺=双中卫+门将｜打不了=守不住定位球']) == []
+    assert [x for x in lint_hub_pairing(
+        [{'header': '周四003 甲 vs 乙', 'lines': ['排除=客胜｜理由=客伤停重']}], day='2026-10-22'
+    ) if '伤停排除' in x['message']] == []
+    assert [x for x in lint_hub_pairing(
+        [{'header': '周四003 甲 vs 乙', 'lines': ['排除=客胜｜理由=客连败战意低']}], day='2026-10-23'
+    ) if '伤停排除' in x['message']] == []
     with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
         tf.write('博=4元｜001让负 × 007让负\n大博=2元｜001让负 × 002让胜\n')
         fp = tf.name
@@ -3679,11 +3711,11 @@ def _self_check() -> None:
         )
         assert not any('不败' in w.get('message', '') and w.get('severity') == 'ERROR' for w in ok91), ok91
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87 + play91: ok')
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87 + play91 + injury92: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.91 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.92 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')

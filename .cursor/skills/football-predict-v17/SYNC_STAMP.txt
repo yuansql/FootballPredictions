@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-23 09:15:00
+version_note: V17.4.92 伤停排除（亲爱的「直接改：名单长只能暂缓」）：理由靠伤停排主胜|客胜须【伤停排除】核心缺=｜打不了=，写不出只能暂缓；依据同类穿4场（10-20 010、10-21 005/011、10-22 003）。lint INJURY_CORE_DAY=2026-10-23。SKILL+output-template+防偷懒+使用+README+lint_draft。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-22 18:25:00
 version_note: V17.4.91 玩法不限落地（亲爱的「买票玩法不限的」→「改」）：出票按剧本选玩法；不败进稳须胜/平或小胜让平；禁倾向单选拧稳；禁默认全场胜平负单选凑串；lint 只扫【今日票面】。lint PLAY_MAP_DAY。SKILL+防偷懒+使用+README+output-template+lint_draft。
 
