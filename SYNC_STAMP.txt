@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-23 09:40:00
+version_note: V17.4.94 纠正4.91（亲爱的选「让平只进博」）：让平只赢1球才中≈24%，进稳后稳票≈17%与博无异 → 让平禁进稳；不败进稳只许胜/平复式；过不了翻倍→稳=空，禁为过翻倍塞让平。lint RANGPING_STABLE_DAY。SKILL+output-template+防偷懒+使用+README+lint_draft。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-23 09:30:00
 version_note: V17.4.93 伤停排除须新缺（亲爱的「先查4场是不是旧缺，≥2场再加」→查得4/4旧缺）：【伤停排除】加缺几场=新缺；核心不在上一场阵容=已缺、资格限制=旧缺，不能当排除理由。lint INJURY_CORE_DAY。SKILL+取证速查+output-template+防偷懒+使用+README+lint_draft。
 

@@ -112,6 +112,7 @@ STYLE_FETCH_DAY = "2026-10-21"  # V17.4.86：候选 01a 须【三页取证】（
 LEDGER_SINGLE_DAY = "2026-10-21"  # V17.4.87：账本单关放行（SP≥2.0｜我估≥40%｜≤4元，非稳）；免 CAUTION 复式
 LEDGER_DUAL_DAY = "2026-10-22"  # V17.4.90：账本每天12元稳+博；候选/认真拆≤4
 PLAY_MAP_DAY = "2026-10-22"  # V17.4.91：玩法不限落地；不败进稳禁倾向单选；票行只扫【今日票面】
+RANGPING_STABLE_DAY = "2026-10-23"  # V17.4.94：让平禁进稳（只许博/大博）
 INJURY_CORE_DAY = "2026-10-23"  # V17.4.92：伤停理由排胜负边须【伤停排除】核心缺=｜打不了=；否则暂缓
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
@@ -1797,8 +1798,19 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                         'match': filepath,
                         'message': (
                             f'稳腿{twist}方向=不败却写倾向单选；'
-                            '改胜/平或小胜让平（V17.4.91）'
+                            '改胜/平复式（V17.4.91/94）'
                         ),
+                    })
+                    break
+        # V17.4.94：让平=只赢 1 球才中（去水≈24%），禁进稳
+        if not (day and day < RANGPING_STABLE_DAY):
+            for m in re.finditer(r'稳\s*=[^\n]+', ticket_blk):
+                if re.search(r'让平', m.group(0)):
+                    warnings.append({
+                        'rule': 'lint_today_ticket',
+                        'severity': 'ERROR',
+                        'match': filepath,
+                        'message': '让平禁进稳（只赢1球才中≈24%）；让平只许博/大博，稳过不了翻倍就空（V17.4.94）',
                     })
                     break
     # V17.4.49 临场闸：票空仓免写；非空仓真下才须【临场闸】。
@@ -3722,12 +3734,26 @@ def _self_check() -> None:
             parse_sections(fp91), day='2026-10-22', filepath=fp91,
         )
         assert not any('不败' in w.get('message', '') and w.get('severity') == 'ERROR' for w in ok91), ok91
+        # V17.4.94：同一张 稳 含让平，10-23 起 ERROR；10-22 旧稿不追溯
+        rp = lambda d: [w for w in lint_today_ticket(parse_sections(fp91), day=d, filepath=fp91)
+                        if '让平禁进稳' in w.get('message', '')]
+        assert rp('2026-10-23') and rp('2026-10-22') == []
+        with open(fp91, 'w', encoding='utf-8') as f:
+            f.write(
+                '交卷模式=下注单\n【票面候选】≤3｜003｜012\n'
+                '## 周四003 甲 vs 乙\n方向=主不败｜倾向=主胜\n动作=PROCEED｜情报档=充足\n'
+                '## 周四012 丙 vs 丁\n方向=主不败｜倾向=主胜\n动作=PROCEED｜情报档=充足\n'
+                '【今日票面】\n预算=12元\n'
+                '稳=空｜弃因=翻倍不过\n'
+                '博=4元｜003让平(主-1)×012胜/平｜分注2+2｜翻倍=过\n账本=过｜翻倍=过\n'
+            )
+        assert rp('2026-10-23') == []
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87 + play91 + injury92 + fresh93: ok')
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87 + play91 + injury92 + fresh93 + rangping94: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.93 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V17.4.94 日闸 lint 工具")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')
