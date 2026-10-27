@@ -109,6 +109,7 @@ MARKET_EDGE_DAY = "2026-10-21"  # V17.4.82/83：候选须【市场漏】行；�
 PLAY_FREE_DAY = "2026-10-21"  # V17.4.84：每张票≥2场（禁单关）；玩法不限（复式/大博比分不再拦）
 DOUBLE_DAY = "2026-10-21"  # V17.4.85：每条命中路返还≥2倍本金（翻倍=过）；CAUTION场进票须复式
 STABLE_NOLOSE_DAY = "2026-10-23"  # V17.4.95：稳票只须 回本=过（每条命中路≥本金）；博仍翻倍
+STABLE_DOUBLE_DAY = "2026-10-27"  # V17.4.97：稳票回到 翻倍=过（回本窗口只覆盖 10-23～10-26）
 STYLE_FETCH_DAY = "2026-10-21"  # V17.4.86：候选 01a 须【三页取证】（教练/裁判/捷报猫事实）
 LEDGER_SINGLE_DAY = "2026-10-21"  # V17.4.87：账本单关放行（SP≥2.0｜我估≥40%｜≤4元，非稳）；免 CAUTION 复式
 LEDGER_DUAL_DAY = "2026-10-22"  # V17.4.90：账本每天12元稳+博；候选/认真拆≤4
@@ -1811,7 +1812,7 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                         'rule': 'lint_today_ticket',
                         'severity': 'ERROR',
                         'match': filepath,
-                        'message': '让平禁进稳（只赢1球才中≈24%）；让平只许博/大博，稳过不了回本就空（V17.4.94/95）',
+                        'message': '让平禁进稳（只赢1球才中≈24%）；让平只许博/大博，稳过不了翻倍就空，禁塞让平凑倍（V17.4.94/97）',
                     })
                     break
     # V17.4.49 临场闸：票空仓免写；非空仓真下才须【临场闸】。
@@ -2645,7 +2646,7 @@ def lint_edge_hub(sections: list[dict], day: str | None = None, filepath: str | 
                 })
     if not (day and day < DOUBLE_DAY):
         live = [l for l in lines if not re.match(r'(?:稳|博|大博|机动|尖可选)\s*=\s*空', l)]
-        nolose = not (day and day < STABLE_NOLOSE_DAY)
+        nolose = bool(day) and STABLE_NOLOSE_DAY <= day < STABLE_DOUBLE_DAY
         stable_live = [l for l in live if nolose and re.match(r'稳\s*=', l)]
         for line in stable_live:
             if not re.search(r'回本\s*=\s*过', line):
@@ -3767,8 +3768,11 @@ def _self_check() -> None:
         assert any('回本' in m for m in nl('稳=8元｜003主胜×012胜/平｜分注6+2\n博=空\n账本=过\n'))
         assert any('翻倍' in m for m in nl('稳=8元｜003主胜×012胜/平｜回本=过\n博=4元｜005胜×007胜｜1注×2倍\n账本=过\n'))
         assert not nl('稳=8元｜003主胜×012胜/平｜翻倍=过\n博=空\n账本=过｜翻倍=过\n', d='2026-10-22')
+        # V17.4.97：10-27 起稳票回到 翻倍=过，只写 回本=过 不够
+        assert any('翻倍' in m for m in nl('稳=8元｜003主胜×012胜/平｜回本=过\n博=空\n账本=过\n', d='2026-10-27'))
+        assert not nl('稳=8元｜003主胜×012主胜｜1注×4倍｜翻倍=过\n博=空\n账本=过｜翻倍=过\n', d='2026-10-27')
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87 + play91 + injury92 + fresh93 + rangping94 + nolose95: ok')
+    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87 + play91 + injury92 + fresh93 + rangping94 + nolose95 + double97: ok')
 
 
 if __name__ == "__main__":

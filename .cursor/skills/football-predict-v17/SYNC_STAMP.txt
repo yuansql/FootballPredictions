@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-10-27 10:05:00
+version_note: V17.4.97 稳票回到翻倍（亲爱的「稳票只要2倍以上就行」「1.30×1.35中了也没多少，冷门一下就没了」）：稳/博都 翻倍=过；回本档只覆盖10-23～10-26。lint STABLE_DOUBLE_DAY。SKILL+output-template+防偷懒+使用+README+版本史+lint_draft。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-10-23 10:30:00
 version_note: V17.4.96 瘦身（亲爱的选「只合并文字、lint 不动，然后冻结到 30 场」）：SKILL 去掉文首 27 段版本补丁与按版本禁止条，【今日票面】重写为当前有效规则一份（稳回本/博翻倍/让平禁稳/不败胜平/分散/单关仅点名）；强弱对位、伤停已核并入正文；候选≤4 对齐；原文搬 references/版本史.md。lint 与 self-check、10-21/10-22 回放结果不变。SKILL+防偷懒+使用+README+版本史。
 
