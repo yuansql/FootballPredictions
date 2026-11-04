@@ -95,6 +95,7 @@ DUAL_DEBUT_DAY = "2026-09-18"  # 双新军锁主闸 soft#9
 SUMMARY_TABLE_DAY = "2026-09-18"  # 全场汇总表（排除/推方向/倾向/比分/进球）
 SUMMARY_HC_COL_DAY = "2026-09-23"  # 汇总表必含让球胜平负列（4.57）
 SUMMARY_FORCED_COL_DAY = "2026-10-08"  # 汇总表必含强制列 单选/a/b/c（4.68）
+WATCH_PUSH_DAY = "2026-11-04"  # V17.4.99：没有一侧写观望，强制=不定，禁止硬装
 HC_ONLY_DAY = "2026-09-18"  # 只开让球分通道（胜平负未开售）
 COLD_UPSET_DAY = "2026-09-20"  # 冷门预防统一亮牌
 HC_SPF_SINGLE_DAY = "2026-09-20"  # 让球稳健可荐文末块
@@ -295,6 +296,7 @@ def lint_02_must_direction(
     """
     4.22.3 方向必须给。检查每场是否有方向原子。
     V17.4.52：研究板允许 观望/不定罩；下注单仍须锁*/不败。
+    V17.4.99：下注单没有一侧可写观望（须倾向=不定且有弃因）；禁止硬装成不败。
     """
     if day and day < DIR_MUST_DAY:
         return []
@@ -326,10 +328,37 @@ def lint_02_must_direction(
                 break
 
         if has_direction:
+            if day and day >= WATCH_PUSH_DAY and re.search(
+                r'方向\s*=\s*(?:主不败|客不败|锁主|锁客|锁平)', blob
+            ) and re.search(r'倾向\s*=\s*不定', blob) and not re.search(
+                r'倾向\s*=\s*(?:主胜|客胜|平)(?:[^\u4e00-\u9fff]|$)', blob
+            ):
+                warnings.append({
+                    'rule': 'lint_02_must_direction',
+                    'severity': 'ERROR',
+                    'match': header,
+                    'message': '没有一侧禁止硬装成不败或锁，方向改观望（V17.4.99）',
+                })
             continue
         if has_soft and allow_soft:
             continue
         if has_soft and mode == '下注单':
+            if day and day >= WATCH_PUSH_DAY and '观望' in blob:
+                if not re.search(r'倾向\s*=\s*不定', blob):
+                    warnings.append({
+                        'rule': 'lint_02_must_direction',
+                        'severity': 'ERROR',
+                        'match': header,
+                        'message': '观望场倾向必须=不定（V17.4.99）',
+                    })
+                elif not re.search(r'(?:弃因|理由)\s*=\s*\S', blob):
+                    warnings.append({
+                        'rule': 'lint_02_must_direction',
+                        'severity': 'ERROR',
+                        'match': header,
+                        'message': '观望须一句弃因（理由=或弃因=；V17.4.99）',
+                    })
+                continue
             warnings.append({
                 'rule': 'lint_02_must_direction',
                 'severity': 'ERROR',
@@ -1689,6 +1718,25 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                             f'票腿场次{outside}不在【票面候选】内（V17.4.71）'
                         ),
                     })
+    if day and day >= WATCH_PUSH_DAY:
+        watch_ids = set()
+        for sec in sections:
+            if re.search(r'方向\s*=\s*观望', '\n'.join(sec['lines'])):
+                mid = re.search(r'(\d{3})', sec['header'])
+                if mid:
+                    watch_ids.add(mid.group(1))
+        if watch_ids:
+            ticket_nums = set()
+            for tm in re.finditer(r'(?:稳|博|大博|机动)\s*=[^\n]+', body):
+                ticket_nums |= set(re.findall(r'(?<!\d)(\d{3})(?!\d)', tm.group(0)))
+            hit = sorted(watch_ids & ticket_nums)
+            if hit:
+                warnings.append({
+                    'rule': 'lint_today_ticket',
+                    'severity': 'ERROR',
+                    'match': filepath,
+                    'message': f'观望场{hit}不能进票（V17.4.99）',
+                })
     if empty:
         return warnings
     # 非空仓：方案= 或 形态=一张/两张 或 稳=
@@ -2234,7 +2282,7 @@ def lint_summary_table(sections: list[dict], day: str | None = None, filepath: s
         return warnings
 
     if (not day) or (day >= SUMMARY_FORCED_COL_DAY):
-        warnings += _lint_forced_col(content)
+        warnings += _lint_forced_col(content, day)
         if any(w['severity'] == 'ERROR' for w in warnings):
             return warnings
 
@@ -2250,8 +2298,9 @@ def lint_summary_table(sections: list[dict], day: str | None = None, filepath: s
     return warnings
 
 
-def _lint_forced_col(content: str) -> list[dict]:
-    """V17.4.68：汇总表「强制」列每行 单选/a/b/c；倾向≠不定须一致；比分非弃权须=比分篮（同序）。"""
+def _lint_forced_col(content: str, day: str | None = None) -> list[dict]:
+    """V17.4.68：汇总表「强制」列每行 单选/a/b/c；倾向≠不定须一致；比分非弃权须=比分篮（同序）。
+    V17.4.99：观望行强制=不定；没有一侧禁止硬装。"""
     def err(match, msg):
         return {'rule': 'lint_summary_table', 'severity': 'ERROR', 'match': match, 'message': msg + '（V17.4.68）'}
 
@@ -2265,6 +2314,8 @@ def _lint_forced_col(content: str) -> list[dict]:
         return [err('全文', '缺【全场汇总表】强制列：…|进球|强制（每场 单选/a/b/c，禁不定/弃权）')]
     ci, li, si = cols.index('强制'), next(i for i, c in enumerate(cols) if '倾向' in c), \
         next(i for i, c in enumerate(cols) if re.match(r'(比分|推比分|主\s*/\s*次\s*/\s*防)', c))
+    di = next((i for i, c in enumerate(cols) if '推方向' in c), None)
+    watch = bool(day and day >= WATCH_PUSH_DAY)
     out = []
     for l in lines[hdr_i + 2:]:
         if not l.strip().startswith('|'):
@@ -2272,6 +2323,14 @@ def _lint_forced_col(content: str) -> list[dict]:
         cells = [c.strip() for c in l.strip().strip('|').split('|')]
         if len(cells) <= ci:
             out.append(err(cells[0], '汇总表行缺强制列'))
+            continue
+        pushed = cells[di] if di is not None and len(cells) > di else ''
+        if watch and pushed == '观望':
+            if cells[li] != '不定' or cells[ci] != '不定':
+                out.append(err(cells[0], '观望场倾向和强制都须为不定，禁止硬装'))
+            continue
+        if watch and cells[li] == '不定' and pushed in ('主不败', '客不败', '锁主', '锁客', '锁平'):
+            out.append(err(cells[0], '没有一侧禁止硬装成不败或锁，方向改观望、强制写不定'))
             continue
         m = re.fullmatch(r'(主胜|平|客胜)((?:\s*/\s*\d+-\d+){3})', cells[ci])
         forced = re.findall(r'\d+-\d+', m.group(2)) if m else []
@@ -3520,6 +3579,38 @@ def _self_check() -> None:
     try:
         assert any('强制列' in x['message'] for x in lint_summary_table(sec, day='2026-10-08', filepath=fp))
         assert lint_summary_table(sec, day='2026-10-07', filepath=fp) == []
+    finally:
+        os.unlink(fp)
+
+    # V17.4.99 观望不硬装
+    hdr99 = ('| 编号 | 对阵 | 排除 | 推方向 | 倾向 | 让球胜平负 | 比分 | 进球 | 强制 |\n'
+             '|---|---|---|---|---|---|---|---|---|\n')
+    watch_row = '| 004 | 甲 vs 乙 | 暂缓 | 观望 | 不定 | 不定 | 比分弃权 | 2-3 | 不定 |\n'
+    hard_row = '| 005 | 甲 vs 乙 | 暂缓 | 主不败 | 不定 | 不定 | 比分弃权 | 1-3 | 平/1-1/1-0/0-1 |\n'
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+        tf.write('交卷模式=下注单\n【全场汇总表】\n' + hdr99 + watch_row + hard_row)
+        fp = tf.name
+    try:
+        errs = [x for x in lint_summary_table(sec, day='2026-11-04', filepath=fp) if x['severity'] == 'ERROR']
+        assert len(errs) == 1 and '硬装' in errs[0]['message'], errs
+        assert [x for x in lint_summary_table(sec, day='2026-11-03', filepath=fp) if x['severity'] == 'ERROR' and '观望' in x['message']] == []
+    finally:
+        os.unlink(fp)
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+        tf.write('交卷模式=下注单\n')
+        fp = tf.name
+    try:
+        ok_sec = [{'header': '周三004 甲 vs 乙', 'lines': [
+            '排除=暂缓｜理由=近况对不上', '方向=观望｜倾向=不定',
+        ]}]
+        bad_sec = [{'header': '周三005 甲 vs 乙', 'lines': [
+            '排除=暂缓｜理由=两边都有新缺', '方向=主不败｜倾向=不定',
+        ]}]
+        assert lint_02_must_direction(ok_sec, day='2026-11-04', filepath=fp) == []
+        assert any('硬装' in x['message'] for x in lint_02_must_direction(bad_sec, day='2026-11-04', filepath=fp))
+        assert lint_02_must_direction(bad_sec, day='2026-11-03', filepath=fp) == []
+        bare = [{'header': '周三006 甲 vs 乙', 'lines': ['方向=观望｜倾向=不定']}]
+        assert any('弃因' in x['message'] for x in lint_02_must_direction(bare, day='2026-11-04', filepath=fp))
     finally:
         os.unlink(fp)
 

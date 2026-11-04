@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-11-04 11:05:00
+version_note: V17.4.99 没有一侧写观望（亲爱的「如何调整」后点名改、同步、上传）：方向=观望、倾向=不定、强制=不定，须一句弃因；不进推的准确率，不进票；禁止硬装成不败或主胜。lint WATCH_PUSH_DAY=2026-11-04。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-11-03 10:15:00
 version_note: V17.4.98 谁赢盖不住禁止译成胜/平（亲爱的「改skill」，并改掉装不进本金就空仓）：三个胜平负都活着则出票通道=进球且区间各档都买；不设每天12元上限，金额按注数，翻倍按该票实际本金。已倾斜到单侧的场仍买该侧。lint 未加。SKILL+防偷懒+使用+output-template+README+版本史+账本。
 
