@@ -19,7 +19,7 @@ for arg in "$@"; do
   esac
 done
 
-mkdir -p "$REF" "$REF/rules"
+mkdir -p "$REF" "$REF/rules" "$PKG/scripts"
 
 FILES=(
   外部模型启动卡.txt
@@ -69,6 +69,11 @@ rm -f \
 [[ -f "$ROOT/使用.md" ]] && cp "$ROOT/使用.md" "$PKG/使用.md"
 [[ -f "$ROOT/SYNC_STAMP.txt" ]] && cp "$ROOT/SYNC_STAMP.txt" "$PKG/SYNC_STAMP.txt"
 
+SCRIPTS=(lint_draft.py structure_gate.py deep_away_trap.py gen_rma_detail_table.py audit_delivery.py)
+for s in "${SCRIPTS[@]}"; do
+  cp "$ROOT/scripts/$s" "$PKG/scripts/$s"
+done
+
 sync_local_skill() {
   local dest="$1"
   mkdir -p "$dest" "$dest/scripts" "$dest/references"
@@ -77,8 +82,8 @@ sync_local_skill() {
   [[ -f "$PKG/使用.md" ]] && cp "$PKG/使用.md" "$dest/"
   [[ -f "$PKG/SYNC_STAMP.txt" ]] && cp "$PKG/SYNC_STAMP.txt" "$dest/"
   cp -R "$REF/." "$dest/references/"
-  for s in lint_draft.py structure_gate.py deep_away_trap.py gen_rma_detail_table.py; do
-    [[ -f "$ROOT/scripts/$s" ]] && cp "$ROOT/scripts/$s" "$dest/scripts/"
+  for s in "${SCRIPTS[@]}"; do
+    cp "$PKG/scripts/$s" "$dest/scripts/$s"
   done
   # 清理下游已废除的脚本，避免幽灵文件
   rm -f "$dest/scripts/backtest_structure_gate.py" \

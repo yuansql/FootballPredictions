@@ -3,9 +3,9 @@
 structure_gate.py — V17.4.23 低结构平优先闸
 
 功能：
-1. 根据 1X2 概率 (P_H, P_D, P_A) 计算结构标签
-2. 低结构 + 概率贴脸时强制输出「主不败/客不败」+ 倾向「不定」
-3. 回测支持：读取 markdown 复盘文件，统计启用闸前后方向变化
+1. 根据竞彩 SP (主/平/客) 计算结构风险标签
+2. 低结构仅提示风险，不按较低 SP 强制输出不败或倾向
+3. 历史复盘：只列出结构信号，不模拟方向变化或准确率
 
 用法：
     python3 structure_gate.py --backtest <复盘文件.md>
@@ -61,16 +61,10 @@ def get_enforced_direction(sp_h: float, sp_d: float, sp_a: float) -> Tuple[str, 
     """
     返回 (方向原子, 单子倾向) 的强制输出。
 
-    draw_priority  → (主不败/客不败, 不定)
-    high_structure → (None, None)  [不强制，允许情报焊清]
+    当前规则 V17.4.99：赔率结构只作风险提示，不强制任何方向。
+    返回 (None, None)；需由硬情报单独决定方向，没有一侧则观望。
     """
-    tag = compute_structure_tag(sp_h, sp_d, sp_a)
-    if tag == "draw_priority":
-        # 方向原子：SP 低的一方（庄家看好的一方）的不败
-        if sp_h <= sp_a:
-            return "主不败", "不定"
-        else:
-            return "客不败", "不定"
+    # 保留旧接口供历史回测调用，但禁止市场价格直接生成方向。
     return None, None
 
 
@@ -158,8 +152,6 @@ def run_backtest(filepath: str) -> None:
     matches = parse_markdown_backtest(filepath)
     print(f"解析到 {len(matches)} 场比赛\n")
 
-    changed = 0
-    corrected = 0
     draw_priority_count = 0
 
     for m in matches:
@@ -171,34 +163,23 @@ def run_backtest(filepath: str) -> None:
 
         if tag == "draw_priority":
             draw_priority_count += 1
-            enforced_dir, enforced_lean = get_enforced_direction(p_h, p_d, p_a)
-
-            # 判断原预测是否硬焊了倾向
-            # 简化：若原预测方向是"主不败"但实际写了"主胜"倾向 → 被闸纠正
-            # 这里只统计方向标签变化
             print(f"  [draw_priority] {m['name'][:50]:50s} "
                   f"SP:{p_h:.2f}/{p_d:.2f}/{p_a:.2f} |diff|={abs(p_h-p_a):.2f} "
-                  f"→ 强制: {enforced_dir}+{enforced_lean}")
-            changed += 1
+                  "→ 结构风险提示，不能推断方向")
 
     print(f"\n=== 回测统计 ===")
     print(f"draw_priority 触发场次: {draw_priority_count}")
-    print(f"其中方向/倾向被强制修正: {changed}")
-    print(f"阈值: |P_H - P_A| < {DRAW_PRIORITY_THRESHOLD} ({DRAW_PRIORITY_THRESHOLD*100:.0f}%)")
+    print("本脚本不重算赛前方向或准确率；需另用冻结的赛前记录评估")
+    print("阈值：见 compute_structure_tag 的 SP 条件；此处不衡量预测改进")
 
 
 def run_tag(p_h: float, p_d: float, p_a: float) -> None:
     """单场比赛标签计算。"""
     tag = compute_structure_tag(p_h, p_d, p_a)
-    enforced_dir, enforced_lean = get_enforced_direction(p_h, p_d, p_a)
-
     print(f"SP: {p_h:.2f} / {p_d:.2f} / {p_a:.2f}")
-    print(f"|P_H - P_A| = {abs(p_h - p_a):.3f}")
+    print(f"|SP_H - SP_A| = {abs(p_h - p_a):.3f}")
     print(f"结构标签: {tag}")
-    if enforced_dir:
-        print(f"强制输出: 方向={enforced_dir}, 倾向={enforced_lean}")
-    else:
-        print("不强制（高结构，允许锁单）")
+    print("结构只提示风险；方向须由硬情报决定，无一侧则观望")
 
 
 def run_lint(filepath: str) -> None:
@@ -288,10 +269,8 @@ if __name__ == "__main__":
         ]
         for name, p_h, p_d, p_a in demo_cases:
             tag = compute_structure_tag(p_h, p_d, p_a)
-            enforced_dir, enforced_lean = get_enforced_direction(p_h, p_d, p_a)
             marker = "⚠️" if tag == "draw_priority" else " "
             print(f"{marker} {name}")
             print(f"   SP:{p_h:.2f}/{p_d:.2f}/{p_a:.2f} |diff|={abs(p_h-p_a):.2f} → {tag}")
-            if enforced_dir:
-                print(f"   强制: {enforced_dir} + {enforced_lean}")
+            print("   仅风险提示，不强制方向")
             print()

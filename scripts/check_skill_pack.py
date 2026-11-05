@@ -21,5 +21,20 @@ for ref in set(re.findall(r"`((?:references|scripts|rules)/[^`\s]+)`", skill)):
     if not (ROOT / ref).exists():
         errors.append(f"broken ref: {ref}")
 
+PKG = ROOT / "skills" / "football-predict-v17"
+for name in ("SKILL.md", "使用.md", "output-template.md", "防偷懒.md", "SYNC_STAMP.txt"):
+    source, packaged = ROOT / name, PKG / name
+    if not packaged.is_file() or source.read_bytes() != packaged.read_bytes():
+        errors.append(f"pack mismatch: {name}")
+for source in (ROOT / "references").rglob("*"):
+    if source.is_file() and source.suffix not in (".pyc",):
+        packaged = PKG / "references" / source.relative_to(ROOT / "references")
+        if not packaged.is_file() or source.read_bytes() != packaged.read_bytes():
+            errors.append(f"pack mismatch: references/{source.relative_to(ROOT / 'references')}")
+for name in ("lint_draft.py", "structure_gate.py", "deep_away_trap.py", "gen_rma_detail_table.py", "audit_delivery.py"):
+    source, packaged = ROOT / "scripts" / name, PKG / "scripts" / name
+    if not packaged.is_file() or source.read_bytes() != packaged.read_bytes():
+        errors.append(f"pack mismatch: scripts/{name}")
+
 print("\n".join(errors) or "OK")
 sys.exit(1 if errors else 0)

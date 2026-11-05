@@ -1653,7 +1653,7 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
             'rule': 'lint_today_ticket',
             'severity': 'ERROR',
             'match': filepath,
-            'message': '【今日票面】须含 预算=（默认每天12元；V17.4.84）',
+            'message': '【今日票面】须含 预算=（当前按实际注数；历史稿按当日规则）',
         })
     empty = bool(re.search(r'方案\s*=\s*空仓|空仓', body))
     # V17.4.71：先选【票面候选】（空仓日也要有；日闸 2026-10-13）
@@ -1770,9 +1770,9 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
             'match': filepath,
             'message': '【今日票面】禁止用不败当结算腿（V17.4.41）',
         })
-    # V17.4.70：16元形态 + 稳硬禁（日闸 2026-10-13，不回溯旧稿）
+    # 历史 16 元形态只作用于 2026-11-03 前稿；现行按实际注数。
     if not (day and day < TICKET16_DAY):
-        if re.search(r'预算\s*=\s*16', body) and not re.search(
+        if (day is None or day < '2026-11-03') and re.search(r'预算\s*=\s*16', body) and not re.search(
             r'8\s*\+\s*4\s*\+\s*2\s*\+\s*2', body
         ):
             warnings.append({
@@ -1781,7 +1781,7 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                 'match': filepath,
                 'message': '预算=16须形态=8+4+2+2（V17.4.70）',
             })
-        if re.search(r'10\s*\+\s*4\s*\+\s*2', body):
+        if (day is None or day < '2026-11-03') and re.search(r'10\s*\+\s*4\s*\+\s*2', body):
             warnings.append({
                 'rule': 'lint_today_ticket',
                 'severity': 'ERROR',
@@ -2311,7 +2311,7 @@ def _lint_forced_col(content: str, day: str | None = None) -> list[dict]:
         return []
     cols = [c.strip() for c in lines[hdr_i].strip().strip('|').split('|')]
     if '强制' not in cols:
-        return [err('全文', '缺【全场汇总表】强制列：…|进球|强制（每场 单选/a/b/c，禁不定/弃权）')]
+        return [err('全文', '缺【全场汇总表】强制列：有倾向写单选/a/b/c；观望写不定')]
     ci, li, si = cols.index('强制'), next(i for i, c in enumerate(cols) if '倾向' in c), \
         next(i for i, c in enumerate(cols) if re.match(r'(比分|推比分|主\s*/\s*次\s*/\s*防)', c))
     di = next((i for i, c in enumerate(cols) if '推方向' in c), None)
@@ -3465,7 +3465,7 @@ def _self_check() -> None:
         assert any('交卷模式' in x['message'] for x in w_mode)
     finally:
         os.unlink(bad_path)
-    
+
     # V17.4.56 杯赛揭幕准度
     cup_bad = [{
         'header': '周二003 诺茨郡 vs 格里姆｜英锦标赛 · 揭幕',
@@ -3881,5 +3881,3 @@ if __name__ == "__main__":
 
     report = run_lint(args.file, args.day)
     sys.exit(1 if report['errors'] else 0)
-
-
