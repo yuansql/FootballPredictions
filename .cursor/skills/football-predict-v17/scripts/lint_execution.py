@@ -28,9 +28,21 @@ def _fixture_rows(raw):
         if not m:
             continue
         prefix = m.group(3).split(' 亚欧析', 1)[0]
-        match = re.search(r'(?:\b\d{1,2}:\d{2}\s+|\b\d{1,2}\s+)(.+?)\s+(?:-|\d+-\d+)\s+(.+?)$', prefix)
+        # 行头可能是：赛事名 + 开赛时刻 + 中场/完场 + 比分标记 + 主队 - 客队
+        parts = [p for p in re.split(r'\s+', prefix) if p]
+        dash = parts.index('-') if '-' in parts else len(parts)
+        head = parts[1:dash] if len(parts) > 1 else parts  # 丢掉赛事名
+        skip = 0
+        for p in head:
+            if re.fullmatch(r'\d{1,2}(:\d{2})?', p) or p in ('中场', '完场') or re.fullmatch(r'\d+-\d+', p):
+                skip += 1
+            else:
+                break
+        home = ' '.join(head[skip:]).strip() if skip < len(head) else ''
+        away = ' '.join(parts[dash + 1:]).strip() if dash < len(parts) else ''
+        match = (home, away) if home and away else None
         if match:
-            rows[(m.group(1), m.group(2))] = (match.group(1).strip(), match.group(2).strip())
+            rows[(m.group(1), m.group(2))] = (match[0], match[1])
     return rows
 
 
