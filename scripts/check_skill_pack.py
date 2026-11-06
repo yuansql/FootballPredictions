@@ -31,7 +31,7 @@ for source in (ROOT / "references").rglob("*"):
         packaged = PKG / "references" / source.relative_to(ROOT / "references")
         if not packaged.is_file() or source.read_bytes() != packaged.read_bytes():
             errors.append(f"pack mismatch: references/{source.relative_to(ROOT / 'references')}")
-for name in ("lint_draft.py", "structure_gate.py", "deep_away_trap.py", "gen_rma_detail_table.py", "audit_delivery.py"):
+for name in ("lint_draft.py", "lint_execution.py", "check_day.py", "structure_gate.py", "deep_away_trap.py", "gen_rma_detail_table.py", "audit_delivery.py"):
     source, packaged = ROOT / "scripts" / name, PKG / "scripts" / name
     if not packaged.is_file() or source.read_bytes() != packaged.read_bytes():
         errors.append(f"pack mismatch: scripts/{name}")

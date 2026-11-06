@@ -69,7 +69,7 @@ rm -f \
 [[ -f "$ROOT/使用.md" ]] && cp "$ROOT/使用.md" "$PKG/使用.md"
 [[ -f "$ROOT/SYNC_STAMP.txt" ]] && cp "$ROOT/SYNC_STAMP.txt" "$PKG/SYNC_STAMP.txt"
 
-SCRIPTS=(lint_draft.py structure_gate.py deep_away_trap.py gen_rma_detail_table.py audit_delivery.py)
+SCRIPTS=(lint_draft.py lint_execution.py check_day.py structure_gate.py deep_away_trap.py gen_rma_detail_table.py audit_delivery.py)
 for s in "${SCRIPTS[@]}"; do
   cp "$ROOT/scripts/$s" "$PKG/scripts/$s"
 done

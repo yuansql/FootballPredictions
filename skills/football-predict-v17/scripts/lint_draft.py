@@ -158,6 +158,11 @@ compute_structure_tag = structure_gate.compute_structure_tag
 get_enforced_direction = structure_gate.get_enforced_direction
 parse_sp_line = structure_gate.parse_sp_line
 
+_exec_spec = importlib.util.spec_from_file_location('lint_execution', os.path.join(_SCRIPT_DIR, 'lint_execution.py'))
+_exec_module = importlib.util.module_from_spec(_exec_spec)
+_exec_spec.loader.exec_module(_exec_module)
+lint_execution = _exec_module.lint_execution
+
 
 MATCH_CODE_RE = re.compile(r'周[一二三四五六日]\d{3}')
 VS_SPLIT_RE = re.compile(r'(?i)\bvs\b')
@@ -2963,6 +2968,15 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_market_edge] ✓ 通过")
+
+        w_exec = lint_execution(sections, day, filepath)
+        all_warnings.extend(w_exec)
+        if w_exec:
+            print(f"\n[lint_execution] 发现 {len(w_exec)} 个问题:")
+            for item in w_exec:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print("\n[lint_execution] ✓ 通过")
 
     print("\n" + "=" * 60)
     total = len(all_warnings)
