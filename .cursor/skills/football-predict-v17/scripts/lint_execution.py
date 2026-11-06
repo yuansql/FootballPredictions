@@ -24,11 +24,11 @@ def _fixture_rows(raw):
     rows = {}
     for line in raw.splitlines():
         # 已保存列表格式：sid sale 周四 009 赛事 时间 主队 - 客队 SPF... 荐
-        m = re.search(r'\b(周[一二三四五六日天])\s+(\d{3})\s+(.+?)\s+荐\s+', line)
+        m = re.search(r'\b(周[一二三四五六日天])\s*(\d{3})\s+(.+?)\s+荐\s+', line)
         if not m:
             continue
         prefix = m.group(3).split(' 亚欧析', 1)[0]
-        match = re.search(r'(?:\b\d{1,2}:\d{2}\s+|\b\d{1,2}\s+)(.+?)\s+(?:-|\d+-\d+)\s+(.+?)\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?$', prefix)
+        match = re.search(r'(?:\b\d{1,2}:\d{2}\s+|\b\d{1,2}\s+)(.+?)\s+(?:-|\d+-\d+)\s+(.+?)$', prefix)
         if match:
             rows[(m.group(1), m.group(2))] = (match.group(1).strip(), match.group(2).strip())
     return rows

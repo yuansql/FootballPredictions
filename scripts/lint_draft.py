@@ -2602,10 +2602,11 @@ def lint_hub_pairing(sections: list[dict], day: str | None = None, filepath: str
         if not low:
             continue
         n = sum(1 for t in tickets if nm.group(1) in t)
-        if n >= 2:
+        named_ok = bool(re.search(r'共胆\s*=\s*[^\n]*点名', content))
+        if n >= 2 and not named_ok:
             warnings.append({
                 'rule': 'lint_hub_pairing', 'severity': 'ERROR', 'match': sec['header'],
-                'message': f'低结构场{nm.group(1)}进了{n}张票，最多1张，禁当共同胆（V17.4.80）',
+                'message': f'低结构场{nm.group(1)}进了{n}张票，最多1张，禁当共同胆（V17.4.80；点名共胆须写 共胆=…点名）',
             })
     return warnings
 
