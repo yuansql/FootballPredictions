@@ -84,7 +84,7 @@ def evidence(day_dir, draft, manifest):
     return errors, unverified
 
 
-def check_ticket(ticket, index, candidates, watch):
+def check_ticket(ticket, index, candidates, watch, draft_sections=None):
     label = f'票 {index}'
     errors = []
     if not isinstance(ticket, dict):
@@ -117,6 +117,14 @@ def check_ticket(ticket, index, candidates, watch):
         if not isinstance(choices, list) or not choices:
             errors.append(f'{label} 腿 {pos} 缺具体选项和 SP')
             continue
+        # 候选分级：稳票腿须 ★★★★；博票至少一腿 ★★★★
+        if draft_sections:
+            for sec in draft_sections:
+                blob = '\n'.join(sec['lines'])
+                if mid in blob:
+                    star = re.search(r'★{2,4}', blob)
+                    if ticket.get('name') == '稳' and star and star.group(0) != '★★★★':
+                        errors.append(f'{label} 场 {mid} 非 ★★★★，禁进稳')
         next_combos = []
         count *= len(choices)
         for choice in choices:
@@ -127,6 +135,13 @@ def check_ticket(ticket, index, candidates, watch):
             if sp is not None:
                 next_combos.extend(base * sp for base in combos)
         combos = next_combos
+        # 进球数区间校验
+        if '进球' in str(play):
+            opts = [str(c.get('option', '')) for c in choices]
+            if len(opts) >= 2:
+                nums = [int(re.search(r'\d+', o).group()) for o in opts if re.search(r'\d+', o)]
+                if nums and max(nums) - min(nums) + 1 != len(nums):
+                    errors.append(f'{label} 进球数区间 {sorted(nums)} 不连续')
     if len(ids) != len(set(ids)):
         errors.append(f'{label} 同场不能充作跨场串')
     multiple = ticket.get('multiple', 1)
@@ -191,7 +206,7 @@ def ticket_audit(day_dir, draft, manifest):
     if len(names) != len(set(names)) or any(n not in ('稳', '博') for n in names):
         errors.append('默认每晚最多一张稳和一张博；票名不得重复')
     for i, ticket in enumerate(tickets, 1):
-        errors.extend(check_ticket(ticket, i, candidates, watch))
+        errors.extend(check_ticket(ticket, i, candidates, watch, sections))
     return errors
 
 

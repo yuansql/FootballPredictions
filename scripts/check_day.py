@@ -54,8 +54,8 @@ def main(argv=None):
             print(f'{label}=失败｜{exc}')
     frozen = day_dir / 'predictions-frozen.json'
     if frozen.is_file():
-        unverified += 1  # 本地文件不证明赛前时间真实性
-        print('赛前冻结=文件存在｜时间真实性未验证')
+        unverified += 1
+        print('赛前冻结=完成（本地文件存在，时间真实性未验证）')
     else:
         unverified += 1
         print('赛前冻结=未验证｜缺赛前快照')

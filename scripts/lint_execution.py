@@ -10,6 +10,12 @@ ALIASES = {'布斯巴达': '布拉格斯巴达', '尼美根': '奈梅亨', '阿�
            '费伦茨': '费伦茨瓦罗斯', '莱克普斯纳': '波兹南莱赫',
            '波兹南': '波兹南莱赫'}
 
+import importlib.util
+_spec = importlib.util.spec_from_file_location('structure_gate', str(Path(__file__).parent / 'structure_gate.py'))
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+compute_structure_tag = _mod.compute_structure_tag
+
 
 def canonical(s):
     value = re.sub(r'\s|[※⚠*（）()]', '', s)
@@ -81,6 +87,21 @@ def lint_execution(sections, day=None, filepath=None):
         if not goal or not re.search(r'\d', goal.group(1)):
             out.append(issue('lint_goals_required', 'ERROR', header,
                 '赛前场进球须具体数字档/区间（可写弱置信）；不定、空槽或无数字不算交付'))
+        # 比赛性质
+        nature = re.search(r'【比赛性质】([^\n]*)', blob)
+        if not nature:
+            out.append(issue('lint_match_nature', 'WARN', header, '未标【比赛性质】（联赛|杯赛|欧战|友谊）'))
+        elif '跨级' in nature.group(1) and re.search(r'方向\s*=\s*(锁主|锁客)', blob):
+            if '豁免' not in blob:
+                out.append(issue('lint_match_nature', 'ERROR', header, '跨级杯赛锁*须写豁免行'))
+        # 候选分级
+        star = re.search(r'★{2,4}', blob)
+        if star and '出票=可介入' in blob and star.group(0) != '★★★★':
+            out.append(issue('lint_star_gate', 'ERROR', header, '出票可介入须 ★★★★'))
+        # 联赛/杯赛分账
+        if '近6' in blob and '杯赛' in blob and '联赛' in blob:
+            if re.search(r'近6[^\n]*连胜|近6[^\n]*不败', blob):
+                out.append(issue('lint_split_form', 'WARN', header, '近6场含杯赛大胜须分联赛/杯赛两列'))
     # 比分弃权而强制列三格：不是错误，但复盘必须按两本账分开；审计状态不得省略。
     for marker, allowed in (('证据审计', '通过|未验证|失败|未触发'),
                             ('票面算术', '通过|未验证|失败|未触发'),
@@ -107,6 +128,23 @@ def lint_execution(sections, day=None, filepath=None):
         out.append(issue('lint_audit_status', 'ERROR', '文末', '非空仓票面算术不能写未触发'))
     if re.search(r'证据审计\s*=\s*通过|票面算术\s*=\s*通过', content):
         out.append(issue('lint_audit_status', 'WARN', '文末', '“通过”须由独立审计运行记录支撑；稿内声明本身不是证据'))
+    # 共胆检查：低结构场禁当共胆
+    if '共胆=' in content:
+        for sec in sections:
+            blob = '\n'.join(sec['lines'])
+            sp = re.search(r'现SP\s*=\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)', blob)
+            if sp:
+                sp_h, sp_d, sp_a = map(float, sp.groups())
+                if compute_structure_tag(sp_h, sp_d, sp_a) == 'draw_priority':
+                    num = re.search(r'周[一二三四五六日天](\d{3})', sec['header'])
+                    if num:
+                        out.append(issue('lint_co_anchor', 'ERROR', sec['header'], f'低结构场{num.group(1)}禁当共胆（draw_priority）'))
+    # 市场漏下限
+    for sec in sections:
+        blob = '\n'.join(sec['lines'])
+        m = re.search(r'【市场漏】押=[^｜]*｜隐含=(\d+)%｜我估=(\d+)%', blob)
+        if m and int(m.group(2)) < int(m.group(1)):
+            out.append(issue('lint_market_edge', 'ERROR', sec['header'], f'我估{m.group(2)}%<隐含{m.group(1)}%，该场禁进票（没边）'))
     return out
 
 
