@@ -50,6 +50,15 @@ class AuditTests(unittest.TestCase):
         ticket['tickets'][0]['legs'][0]['choices'][0]['option'] = '让平(主-1)'
         self.assertTrue(any('让平禁止进稳' in e for e in ticket_audit(self.day, self.draft, ticket)))
 
+    def test_stable_star_read_from_own_section(self):
+        text = self.draft.read_text().replace('【票面候选】005｜012｜剔=无\n',
+                                              '【票面候选】005｜012｜剔=无\n候选评级：\n012 ★★★ 锁客\n005 ★★★★ 锁主\n')
+        text = text.replace('方向=锁主｜倾向=主胜', '方向=锁主｜倾向=主胜\n【研究推荐】★★★★☆')
+        text = text.replace('方向=锁客｜倾向=客胜', '方向=锁客｜倾向=客胜\n【研究推荐】★★★☆☆')
+        self.draft.write_text(text, encoding='utf-8')
+        stars = [e for e in ticket_audit(self.day, self.draft, self.ticket(('2.2',), ('2.0',), '2')) if '★★★★' in e]
+        self.assertEqual(stars, ['票 1 场 012 非 ★★★★，禁进稳'])
+
     def test_evidence_hash_and_sidecar(self):
         self.draft.write_text(self.draft.read_text().replace('005｜012｜剔=', '005｜剔='))
         sidecar = self.day / '01a-认真拆-005.md'

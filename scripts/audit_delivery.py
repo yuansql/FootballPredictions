@@ -120,8 +120,9 @@ def check_ticket(ticket, index, candidates, watch, draft_sections=None):
         # 候选分级：稳票腿须 ★★★★；博票至少一腿 ★★★★
         if draft_sections:
             for sec in draft_sections:
-                blob = '\n'.join(sec['lines'])
-                if mid in blob:
+                head = SCORE.search(sec['lines'][0])
+                if head and head.group(1) == mid:
+                    blob = '\n'.join(sec['lines'])
                     star = re.search(r'★{2,4}', blob)
                     if ticket.get('name') == '稳' and star and star.group(0) != '★★★★':
                         errors.append(f'{label} 场 {mid} 非 ★★★★，禁进稳')
@@ -205,6 +206,8 @@ def ticket_audit(day_dir, draft, manifest):
     names = [t.get('name') for t in tickets if isinstance(t, dict)]
     if len(names) != len(set(names)) or any(n not in ('稳', '博') for n in names):
         errors.append('默认每晚最多一张稳和一张博；票名不得重复')
+    sections = [{'lines': sec.split('\n')} for sec in re.split(r'\n## ', text)
+                if SCORE.search(sec.split('\n', 1)[0])]
     for i, ticket in enumerate(tickets, 1):
         errors.extend(check_ticket(ticket, i, candidates, watch, sections))
     return errors
