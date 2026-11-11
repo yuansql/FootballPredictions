@@ -45,7 +45,12 @@ def _fixture_rows(raw):
             else:
                 break
         home = ' '.join(head[skip:]).strip() if skip < len(head) else ''
-        away = ' '.join(parts[dash + 1:]).strip() if dash < len(parts) else ''
+        tail = []
+        for p in parts[dash + 1:]:
+            if re.fullmatch(r'\d+(\.\d+)?', p):  # 客队名后紧跟 SPF 欧赔
+                break
+            tail.append(p)
+        away = ' '.join(tail).strip()
         match = (home, away) if home and away else None
         if match:
             rows[(m.group(1), m.group(2))] = (match[0], match[1])
@@ -139,8 +144,14 @@ def lint_execution(sections, day=None, filepath=None):
                     num = re.search(r'周[一二三四五六日天](\d{3})', sec['header'])
                     if num:
                         out.append(issue('lint_co_anchor', 'ERROR', sec['header'], f'低结构场{num.group(1)}禁当共胆（draw_priority）'))
-    # 市场漏下限
+    # 市场漏下限：只挡真进票的腿；空仓/未进票由 lint_draft 记 WARN
+    ticket = content.split('【今日票面】', 1)[1].split('\n## ', 1)[0] if '【今日票面】' in content else ''
     for sec in sections:
+        if not ticket or re.search(r'方案\s*=\s*空仓', ticket):
+            break
+        num = re.search(r'周[一二三四五六日天](\d{3})', sec['header'])
+        if not num or not re.search(rf'(?<!\d){num.group(1)}(?!\d)', ticket):
+            continue
         blob = '\n'.join(sec['lines'])
         m = re.search(r'【市场漏】押=[^｜]*｜隐含=(\d+)%｜我估=(\d+)%', blob)
         if m and int(m.group(2)) < int(m.group(1)):

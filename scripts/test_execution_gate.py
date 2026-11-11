@@ -45,7 +45,16 @@ class ExecutionGateTests(unittest.TestCase):
             candidate='【票面候选】无｜弃因=翻倍不过凑不成二串')))
         self.assertTrue(any(x['rule'] == 'lint_audit_status' for x in self.lint(
             candidate='【票面候选】009｜剔=其余情报薄')))
-        self.assertEqual(self.lint(), [])
+        self.assertEqual(self.lint(direction='方向=观望｜进球=2-3\n【比赛性质】欧战｜层级差=同｜揭幕=否'), [])
+
+    def test_market_edge_only_blocks_ticket_legs(self):
+        edge = '方向=观望｜进球=2-3\n【市场漏】押=主胜或平｜隐含=84%｜我估=78%'
+        self.assertNotIn('lint_market_edge', [x['rule'] for x in self.lint(direction=edge)])
+        sec = [{'header': '周四009 塞尔塔 vs 圣吉罗斯', 'lines': [edge]}]
+        for legs, hit in (('稳=010+011', False), ('稳=009+010', True)):
+            self.draft.write_text(f'## 周四009 塞尔塔 vs 圣吉罗斯\n{edge}\n## 【今日票面】\n方案=稳\n{legs}\n', encoding='utf-8')
+            rules = [x['rule'] for x in lint_execution(sec, '2026-11-06', str(self.draft))]
+            self.assertEqual('lint_market_edge' in rules, hit)
 
     def test_review_two_denominators(self):
         self.draft.write_text('【全场汇总表】\n| 编号 | 对阵 | 排除 | 推方向 | 倾向 | 让球胜平负 | 比分 | 进球 | 强制 |\n'
