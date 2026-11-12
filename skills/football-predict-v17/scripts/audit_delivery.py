@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V17.4.99 日稿伴随审计：文件存在性、赛前快照、票面逐路算术。
+"""V18 日稿伴随审计：文件存在性、赛前快照、票面逐路概率与 EV。
 不联网，不证明网页内容真实，也不代替人工核验事实和预测准确率。
 """
 from __future__ import annotations
@@ -84,7 +84,15 @@ def evidence(day_dir, draft, manifest):
     return errors, unverified
 
 
-def check_ticket(ticket, index, candidates, watch, draft_sections=None):
+def probability(value, label, errors):
+    number = dec(value, label, errors, positive=False)
+    if number is None or number < 0 or number > 1:
+        errors.append(f'{label} 须在 0..1: {value!r}')
+        return None
+    return number
+
+
+def check_ticket(ticket, index, candidates, watch):
     label = f'票 {index}'
     errors = []
     if not isinstance(ticket, dict):
@@ -92,8 +100,10 @@ def check_ticket(ticket, index, candidates, watch, draft_sections=None):
     legs = ticket.get('legs')
     if not isinstance(legs, list) or len(legs) < 2:
         return [f'{label} 默认至少两场，legs 至少两项']
+    if ticket.get('joint_probability') not in ('独立近似', '保守调整'):
+        errors.append(f'{label} joint_probability 须为独立近似或保守调整')
     ids = []
-    combos = [Decimal('1')]
+    combos = [(Decimal('1'), Decimal('1'), Decimal('1'))]
     count = 1
     for pos, leg in enumerate(legs, 1):
         if not isinstance(leg, dict):
@@ -108,24 +118,9 @@ def check_ticket(ticket, index, candidates, watch, draft_sections=None):
                 errors.append(f'{label} 场 {mid} 非候选或为观望')
         if not isinstance(play, str) or not play.strip():
             errors.append(f'{label} 腿 {pos} 缺玩法')
-        if ticket.get('name') == '稳' and isinstance(play, str) and '让平' in play:
-            errors.append(f'{label} 腿 {pos} 让平禁止进稳')
-        if ticket.get('name') == '稳' and isinstance(choices, list) and any(
-            isinstance(c, dict) and '让平' in str(c.get('option', '')) for c in choices
-        ):
-            errors.append(f'{label} 腿 {pos} 让平禁止进稳')
         if not isinstance(choices, list) or not choices:
-            errors.append(f'{label} 腿 {pos} 缺具体选项和 SP')
+            errors.append(f'{label} 腿 {pos} 缺具体选项、SP 和概率')
             continue
-        # 候选分级：稳票腿须 ★★★★；博票至少一腿 ★★★★
-        if draft_sections:
-            for sec in draft_sections:
-                head = SCORE.search(sec['lines'][0])
-                if head and head.group(1) == mid:
-                    blob = '\n'.join(sec['lines'])
-                    star = re.search(r'★{2,4}', blob)
-                    if ticket.get('name') == '稳' and star and star.group(0) != '★★★★':
-                        errors.append(f'{label} 场 {mid} 非 ★★★★，禁进稳')
         next_combos = []
         count *= len(choices)
         for choice in choices:
@@ -133,10 +128,14 @@ def check_ticket(ticket, index, candidates, watch, draft_sections=None):
                 errors.append(f'{label} 腿 {pos} 选项缺名称')
                 continue
             sp = dec(choice.get('sp'), f'{label} 腿 {pos} SP', errors)
-            if sp is not None:
-                next_combos.extend(base * sp for base in combos)
+            p_model = probability(choice.get('p_model'), f'{label} 腿 {pos} p_model', errors)
+            p_conservative = probability(choice.get('p_conservative'), f'{label} 腿 {pos} p_conservative', errors)
+            if p_conservative is not None and p_model is not None and p_conservative > p_model:
+                errors.append(f'{label} 腿 {pos} 保守概率不得高于模型概率')
+            if sp is not None and p_model is not None and p_conservative is not None:
+                next_combos.extend((base_sp * sp, base_p * p_model, base_c * p_conservative)
+                                   for base_sp, base_p, base_c in combos)
         combos = next_combos
-        # 进球数区间校验
         if '进球' in str(play):
             opts = [str(c.get('option', '')) for c in choices]
             if len(opts) >= 2:
@@ -154,7 +153,8 @@ def check_ticket(ticket, index, candidates, watch, draft_sections=None):
     if declared is not None and declared != stake:
         errors.append(f'{label} 本金应为 {stake} 元，填写 {declared} 元')
     if len(combos) != count:
-        errors.append(f'{label} 有无法计算的 SP 路径')
+        errors.append(f'{label} 有无法计算的 SP 或概率路径')
+        return errors
     if not ticket.get('odds_captured_at'):
         errors.append(f'{label} 缺赔率采集时间 odds_captured_at')
     else:
@@ -164,10 +164,14 @@ def check_ticket(ticket, index, candidates, watch, draft_sections=None):
                 raise ValueError
         except ValueError:
             errors.append(f'{label} odds_captured_at 须为带时区的 ISO 时间')
-    for route, product in enumerate(combos, 1):
-        payout = MONEY * multiple * product
-        if payout < stake * 2:
-            errors.append(f'{label} 命中路 {route} 返还 {payout} < 2倍本金 {stake * 2}')
+    expected_return = sum((p_model * MONEY * multiple * product
+                           for product, p_model, _ in combos), Decimal('0'))
+    conservative_return = sum((p_conservative * MONEY * multiple * product
+                               for product, _, p_conservative in combos), Decimal('0'))
+    ev = expected_return / stake - 1
+    conservative_ev = conservative_return / stake - 1
+    if conservative_ev <= 0:
+        errors.append(f'{label} 保守EV={conservative_ev:.4%}，须大于 0；模型EV={ev:.4%}')
     return errors
 
 
@@ -201,15 +205,13 @@ def ticket_audit(day_dir, draft, manifest):
             name = ticket['name']
             if re.search(rf'{name}\s*=\s*空', ticket_block):
                 errors.append(f'{name} 的结构化票与 01 空票矛盾')
-    if '账本=过' not in text or '翻倍=过' not in text:
-        errors.append('01 非空仓缺账本=过或翻倍=过')
+    if '账本=过' not in text or 'EV审计=过' not in text:
+        errors.append('01 非空仓缺账本=过或EV审计=过')
     names = [t.get('name') for t in tickets if isinstance(t, dict)]
     if len(names) != len(set(names)) or any(n not in ('稳', '博') for n in names):
         errors.append('默认每晚最多一张稳和一张博；票名不得重复')
-    sections = [{'lines': sec.split('\n')} for sec in re.split(r'\n## ', text)
-                if SCORE.search(sec.split('\n', 1)[0])]
     for i, ticket in enumerate(tickets, 1):
-        errors.extend(check_ticket(ticket, i, candidates, watch, sections))
+        errors.extend(check_ticket(ticket, i, candidates, watch))
     return errors
 
 

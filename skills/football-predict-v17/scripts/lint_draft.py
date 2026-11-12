@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-lint_draft.py — V17.4.56 日闸 lint 工具
+lint_draft.py — V18 日稿 lint（V18 前硬规则仅供历史回放）
 
 功能：
 1. lint_low_structure_weld — 扫描 draw_priority 场是否焊死倾向
@@ -118,6 +118,7 @@ PLAY_MAP_DAY = "2026-10-22"  # V17.4.91：玩法不限落地；不败进稳禁�
 RANGPING_STABLE_DAY = "2026-10-23"  # V17.4.94：让平禁进稳（只许博/大博）
 INJURY_CORE_DAY = "2026-10-23"  # V17.4.92：伤停理由排胜负边须【伤停排除】核心缺=｜打不了=；否则暂缓
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
+V18_DAY = "2026-11-12"  # V18：旧概率补丁、固定返还与强制比分规则退出新稿
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
 LINEUP_GATE_DAY = "2026-09-22"  # 票面非空仓须【临场闸】（4.47）
@@ -204,6 +205,8 @@ def lint_low_structure_weld(sections: list[dict], day: str | None = None) -> lis
     低结构焊死倾向检测。
     draw_priority 场若写了「主胜」「客胜」「锁平」→ warn。
     """
+    if not day or day >= V18_DAY:
+        return []
     if day and day < STRUCTURE_GATE_DAY:
         return []
 
@@ -854,6 +857,8 @@ def lint_seasoning_pack(sections: list[dict], day: str | None = None) -> list[di
     V17.4.50：初盘须标类型；竞彩现盘可用「水位=竞彩现盘对照」，禁装真开盘路径。
     观望场不强制（仍鼓励写）。
     """
+    if not day or day >= V18_DAY:
+        return []
     if day and day < SEASONING_DAY:
         return []
 
@@ -1109,6 +1114,8 @@ def lint_cup_unveiling_accuracy(sections: list[dict], day: str | None = None) ->
     - 揭幕场写主不败/客不败须有【杯赛揭幕闸】+豁免=非空（禁纯联赛外推）
     - 揭幕+（伤停未知|偏薄/不足）装箱三格 → 强制比分弃权（弱置信不可绕过）
     """
+    if not day or day >= V18_DAY:
+        return []
     if day and day < ACCURACY_DAY:
         return []
 
@@ -1248,6 +1255,8 @@ def lint_deep_lock_receipt(sections: list[dict], day: str | None = None) -> list
     竞彩现盘：初盘=竞彩现盘 + 现盘=（水位=竞彩现盘对照可替代路径）
     走不败/降维不拦。
     """
+    if not day or day >= V18_DAY:
+        return []
     if day and day < DEEP_LOCK_DAY:
         return []
 
@@ -1370,6 +1379,8 @@ def lint_euro_deep_away(sections: list[dict], day: str | None = None) -> list[di
     V17.4.33 soft#8：欧冠/欧联/欧协场若方向=锁客，须写【欧战深盘客闸】行。
     （触发阈值靠分析时判断；lint 只拦「欧战场锁客却没亮闸」。）
     """
+    if not day or day >= V18_DAY:
+        return []
     if day and day < EURO_DEEP_AWAY_DAY:
         return []
 
@@ -1403,6 +1414,8 @@ def lint_dual_debut_lock(sections: list[dict], day: str | None = None) -> list[d
     """
     V17.4.33 soft#9：出现双新军/双方首秀叙事且方向=锁主时，须写【双新军锁主闸】。
     """
+    if not day or day >= V18_DAY:
+        return []
     if day and day < DUAL_DEBUT_DAY:
         return []
 
@@ -1775,8 +1788,8 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
             'match': filepath,
             'message': '【今日票面】禁止用不败当结算腿（V17.4.41）',
         })
-    # 历史 16 元形态只作用于 2026-11-03 前稿；现行按实际注数。
-    if not (day and day < TICKET16_DAY):
+    # 固定预算、复式和稳腿名称限制仅用于 V18 前历史稿。
+    if day and TICKET16_DAY <= day < V18_DAY:
         if (day is None or day < '2026-11-03') and re.search(r'预算\s*=\s*16', body) and not re.search(
             r'8\s*\+\s*4\s*\+\s*2\s*\+\s*2', body
         ):
@@ -1932,6 +1945,9 @@ def lint_today_ticket(sections: list[dict], day: str | None = None, filepath: st
                     ),
                 })
                 break
+
+        if not day or day >= V18_DAY:
+            return warnings
 
         def _primary_score_for(num: str):
             """主推比分：该场 ## 节 Top3 首格 → 汇总表比分列首格 → 大博比分。"""
@@ -2144,6 +2160,8 @@ def lint_score_pack(sections: list[dict], day: str | None = None) -> list[dict]:
     V17.4.77：锁* / 【深让可锁】 / 净胜档含屠杀 且已出比分篮（非弃权）
     → 三格至少一格净胜≥3（锁主看主净胜，锁客看客净胜）。WARN。
     """
+    if not day or day >= V18_DAY:
+        return []
     if day and day < SCORE_PACK_DAY:
         return []
     warnings = []
@@ -2336,6 +2354,26 @@ def _lint_forced_col(content: str, day: str | None = None) -> list[dict]:
             continue
         if watch and cells[li] == '不定' and pushed in ('主不败', '客不败', '锁主', '锁客', '锁平'):
             out.append(err(cells[0], '没有一侧禁止硬装成不败或锁，方向改观望、强制写不定'))
+            continue
+        if not day or day >= V18_DAY:
+            raw = cells[ci]
+            if raw in ('未估', '弃权'):
+                continue
+            m18 = re.fullmatch(
+                r'(主胜|平|客胜)(?:\s*/\s*(?:(未估|弃权)|((?:\d+-\d+\s*/\s*){2}\d+-\d+)))?',
+                raw,
+            )
+            if not m18:
+                out.append(err(cells[0], f"V18 强制列非法 '{raw}'（单选后可跟三格或未估/弃权；观望写不定）"))
+                continue
+            lean = cells[li]
+            if lean in ('主胜', '平', '客胜') and lean != m18.group(1):
+                out.append(err(cells[0], f'强制单选 {m18.group(1)} ≠ 倾向 {lean}'))
+            if not re.search(r'未估|弃权', cells[si]):
+                pack = re.findall(r'\d+-\d+', cells[si])
+                forced18 = re.findall(r'\d+-\d+', m18.group(3) or '')
+                if pack and pack != forced18:
+                    out.append(err(cells[0], f"强制三格 {'/'.join(forced18)} ≠ 比分篮 {'/'.join(pack)}"))
             continue
         m = re.fullmatch(r'(主胜|平|客胜)((?:\s*/\s*\d+-\d+){3})', cells[ci])
         forced = re.findall(r'\d+-\d+', m.group(2)) if m else []
@@ -2545,7 +2583,7 @@ def lint_hub_pairing(sections: list[dict], day: str | None = None, filepath: str
                         '写不出改暂缓（V17.4.92）'
                     ),
                 })
-            elif not re.search(r'缺几场\s*=\s*新缺', cm.group(0)):
+            elif day and day < V18_DAY and not re.search(r'缺几场\s*=\s*新缺', cm.group(0)):
                 warnings.append({
                     'rule': 'lint_hub_pairing', 'severity': 'ERROR', 'match': sec['header'],
                     'message': (
@@ -2576,6 +2614,8 @@ def lint_hub_pairing(sections: list[dict], day: str | None = None, filepath: str
                 'rule': 'lint_hub_pairing', 'severity': 'ERROR', 'match': sec['header'],
                 'message': '【强弱对位】须写 打得到=否|是（V17.4.80）',
             })
+    if not day or day >= V18_DAY:
+        return warnings
     if not filepath:
         return warnings
     try:
@@ -2682,8 +2722,15 @@ def lint_edge_hub(sections: list[dict], day: str | None = None, filepath: str | 
     if lines and not empty and not re.search(r'账本\s*=\s*过', ticket_block):
         warnings.append({
             'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': '【今日票面】',
-            'message': '非空仓须写 账本=过（主路径盖本金）；盖不住→方案=空仓｜弃因=没边（V17.4.81）',
+            'message': '非空仓须写 账本=过，并由票面清单核算实际本金',
         })
+    if (not day or day >= V18_DAY) and lines and not empty and not re.search(r'EV审计\s*=\s*过', ticket_block):
+        warnings.append({
+            'rule': 'lint_edge_hub', 'severity': 'ERROR', 'match': '【今日票面】',
+            'message': 'V18 非空仓须写 EV审计=过，并由 tickets.json 验证整票保守EV>0',
+        })
+    if not day or day >= V18_DAY:
+        return warnings
     away_counts: dict[str, int] = {}
     for line in lines:
         parts = re.split(r'[｜|]', line)
@@ -3003,6 +3050,8 @@ def lint_deep_away_trap(sections: list[dict], day: str | None = None) -> list[di
     3. 跨市场背离（竞彩让球盘与亚盘初盘 >= 1 档）
     """
     TRAP_DAY = "2026-09-07"
+    if not day or day >= V18_DAY:
+        return []
     if day and day < TRAP_DAY:
         return []
 
@@ -3154,6 +3203,8 @@ def lint_form_gate(sections: list[dict], day: str | None = None) -> list[dict]:
     状态评分硬闸检测（V17.4.28）。
     若 why_reject 含球星名气叙事但未附 [状态评分硬闸] 收据 → ERROR。
     """
+    if not day or day >= V18_DAY:
+        return []
     if day and day < FORM_GATE_DAY:
         return []
     warnings: list[dict] = []
@@ -3185,6 +3236,8 @@ def lint_both_score(sections: list[dict], day: str | None = None) -> list[dict]:
     BOTH_SCORE 比分补偿检测（V17.4.28）。
     若触发 BOTH_SCORE 信号，防格必须含 1-1/2-1/1-2 族。
     """
+    if not day or day >= V18_DAY:
+        return []
     if day and day < BOTH_SCORE_DAY:
         return []
     both_score_patterns = [
@@ -3227,6 +3280,8 @@ def lint_state_crush(sections: list[dict], day: str | None = None) -> list[dict]
     状态碾压冷门预警检测（V17.4.30）。
     豪门/热门方亚盘让≥0.75 + 核心球员评分<7.0 → WARN。
     """
+    if not day or day >= V18_DAY:
+        return []
     if day and day < STATE_CRUSH_DAY:
         return []
     warnings: list[dict] = []
@@ -3877,12 +3932,38 @@ def _self_check() -> None:
         # V17.4.97：10-27 起稳票回到 翻倍=过，只写 回本=过 不够
         assert any('翻倍' in m for m in nl('稳=8元｜003主胜×012胜/平｜回本=过\n博=空\n账本=过\n', d='2026-10-27'))
         assert not nl('稳=8元｜003主胜×012主胜｜1注×4倍｜翻倍=过\n博=空\n账本=过｜翻倍=过\n', d='2026-10-27')
+        assert rp(V18_DAY) == []
 
-    print('self-check parse headers + deep_lock + delivery + cold_skel + judge52 + quality53 + accuracy56 + summary57 + day_infer + cup_no + score77 + hub80 + edge81 + market82 + play84 + double85 + style86 + single87 + play91 + injury92 + fresh93 + rangping94 + nolose95 + double97: ok')
+    # V18：旧硬闸只做历史回放；新稿由概率、保守EV和弃权口径交付。
+    assert lint_score_pack(bad_pack, day=V18_DAY) == []
+    assert lint_low_structure_weld(hub_sec, day=V18_DAY) == []
+    assert lint_cup_unveiling_accuracy(hub_sec, day=V18_DAY) == []
+    assert lint_deep_lock_receipt(hub_sec, day=V18_DAY) == []
+    assert lint_euro_deep_away(hub_sec, day=V18_DAY) == []
+    assert lint_dual_debut_lock(hub_sec, day=V18_DAY) == []
+    assert lint_deep_away_trap(hub_sec, day=V18_DAY) == []
+    assert lint_both_score(hub_sec, day=V18_DAY) == []
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+        tf.write('【今日票面】\n稳=4元｜001让平(主-1)×001主胜｜1注×2倍\n账本=过｜EV审计=过\n')
+        fp18 = tf.name
+    try:
+        msgs18 = [w['message'] for w in lint_edge_hub([], day=V18_DAY, filepath=fp18)]
+        assert not any('翻倍' in m or '押客' in m or '单关' in m or '复式' in m for m in msgs18), msgs18
+        with open(fp18, 'w', encoding='utf-8') as f:
+            f.write('【今日票面】\n稳=4元｜001让平(主-1)×002主胜\n账本=过\n')
+        assert any('EV审计' in w['message'] for w in lint_edge_hub([], day=V18_DAY, filepath=fp18))
+    finally:
+        os.unlink(fp18)
+    forced18_text = ('| 编号 | 对阵 | 排除 | 推方向 | 倾向 | 让球胜平负 | 比分 | 进球 | 强制 |\n'
+                     '|---|---|---|---|---|---|---|---|---|\n'
+                     '| 001 | 甲 vs 乙 | 客胜 | 锁主 | 主胜 | 未估 | 未估 | 弃权 | 主胜/未估 |\n')
+    assert _lint_forced_col(forced18_text, day=V18_DAY) == []
+
+    print('self-check historical gates + V18 EV/optional-score rules: ok')
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.94 日闸 lint 工具")
+    parser = argparse.ArgumentParser(description="V18 日稿 lint；旧硬规则按日期回放")
     parser.add_argument('file', nargs='?', help='草稿 markdown 文件路径')
     parser.add_argument('--day', help='日期阈值 (YYYY-MM-DD)，小于此日的旧稿不检查新规则', default=None)
     parser.add_argument('--self-check', action='store_true', help='解析标题自检')

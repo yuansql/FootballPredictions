@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 
 EFFECTIVE_DAY = '2026-11-06'  # 当日样本可显式 --day 回放；历史默认不回溯新硬闸
+V18_DAY = '2026-11-12'
 ALIASES = {'布斯巴达': '布拉格斯巴达', '尼美根': '奈梅亨', '阿尔克马': '阿尔克马尔',
            '萨迪纳摩': '萨格勒布迪纳摩', '圣吉联合': '圣吉罗斯',
            '帕梅拉斯': '帕尔梅拉斯', '里莫': '瑞模贝雷',
@@ -90,8 +91,10 @@ def lint_execution(sections, day=None, filepath=None):
             continue
         goal = re.search(r'(?:进球区间|进球)\s*=\s*([^｜\n|]+)', blob)
         if not goal or not re.search(r'\d', goal.group(1)):
-            out.append(issue('lint_goals_required', 'ERROR', header,
-                '赛前场进球须具体数字档/区间（可写弱置信）；不定、空槽或无数字不算交付'))
+            optional_v18 = (not day or day >= V18_DAY) and goal and re.search(r'未估|弃权', goal.group(1))
+            if not optional_v18:
+                out.append(issue('lint_goals_required', 'ERROR', header,
+                    '赛前场总进球须给数字分布/区间，或在 V18 明确写未估/弃权'))
         # 比赛性质
         nature = re.search(r'【比赛性质】([^\n]*)', blob)
         if not nature:
@@ -101,7 +104,7 @@ def lint_execution(sections, day=None, filepath=None):
                 out.append(issue('lint_match_nature', 'ERROR', header, '跨级杯赛锁*须写豁免行'))
         # 候选分级
         star = re.search(r'★{2,4}', blob)
-        if star and '出票=可介入' in blob and star.group(0) != '★★★★':
+        if day and day < V18_DAY and star and '出票=可介入' in blob and star.group(0) != '★★★★':
             out.append(issue('lint_star_gate', 'ERROR', header, '出票可介入须 ★★★★'))
         # 联赛/杯赛分账
         if '近6' in blob and '杯赛' in blob and '联赛' in blob:
@@ -127,14 +130,14 @@ def lint_execution(sections, day=None, filepath=None):
     if re.search(r'方案\s*=\s*空仓', content):
         if not re.search(r'票面算术\s*=\s*未触发', content):
             out.append(issue('lint_audit_status', 'ERROR', '文末', '空仓票面算术须写未触发，不得称翻倍审计通过'))
-        if re.search(r'账本\s*=\s*过|翻倍\s*=\s*过', content.split('【今日票面】', 1)[-1]):
-            out.append(issue('lint_audit_status', 'ERROR', '文末', '空仓不可写账本=过/翻倍=过'))
+        if re.search(r'账本\s*=\s*过|翻倍\s*=\s*过|EV审计\s*=\s*过', content.split('【今日票面】', 1)[-1]):
+            out.append(issue('lint_audit_status', 'ERROR', '文末', '空仓不可写账本=过/翻倍=过/EV审计=过'))
     elif re.search(r'票面算术\s*=\s*未触发', content):
         out.append(issue('lint_audit_status', 'ERROR', '文末', '非空仓票面算术不能写未触发'))
     if re.search(r'证据审计\s*=\s*通过|票面算术\s*=\s*通过', content):
         out.append(issue('lint_audit_status', 'WARN', '文末', '“通过”须由独立审计运行记录支撑；稿内声明本身不是证据'))
-    # 共胆检查：低结构场禁当共胆
-    if '共胆=' in content:
+    # 共胆检查仅用于 V18 前历史稿；新稿按联合概率与整票暴露审计。
+    if day and day < V18_DAY and '共胆=' in content:
         for sec in sections:
             blob = '\n'.join(sec['lines'])
             sp = re.search(r'现SP\s*=\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)', blob)
@@ -144,7 +147,9 @@ def lint_execution(sections, day=None, filepath=None):
                     num = re.search(r'周[一二三四五六日天](\d{3})', sec['header'])
                     if num:
                         out.append(issue('lint_co_anchor', 'ERROR', sec['header'], f'低结构场{num.group(1)}禁当共胆（draw_priority）'))
-    # 市场漏下限：只挡真进票的腿；空仓/未进票由 lint_draft 记 WARN
+    if not day or day >= V18_DAY:
+        return out
+    # 历史市场差挡票；V18 由 audit_delivery 按实际SP与保守EV计算。
     ticket = content.split('【今日票面】', 1)[1].split('\n## ', 1)[0] if '【今日票面】' in content else ''
     for sec in sections:
         if not ticket or re.search(r'方案\s*=\s*空仓', ticket):

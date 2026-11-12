@@ -19,13 +19,13 @@ class ExecutionGateTests(unittest.TestCase):
         self.draft = self.day / '01-竞彩分析.md'
 
     def lint(self, header='周四009 塞尔塔 vs 圣吉罗斯', direction='方向=观望｜进球=2-3',
-             candidate='【票面候选】无｜弃因=情报不足', review=''):
+             candidate='【票面候选】无｜弃因=情报不足', review='', rule_day='2026-11-06'):
         text = f'{candidate}\n交卷模式=研究板\n## {header}\n{direction}\n'
         text += ('【今日票面】\n方案=空仓\n账本=未触发｜翻倍=未触发\n'
                  '证据审计=未触发｜票面算术=未触发｜赛前冻结=未验证\n')
         self.draft.write_text(text, encoding='utf-8')
         sec = [{'header': header, 'lines': [header, direction]}]
-        return lint_execution(sec, '2026-11-06', str(self.draft))
+        return lint_execution(sec, rule_day, str(self.draft))
 
     def test_identity_with_weekday_and_alias(self):
         rows = _fixture_rows((self.day / '_raw/jc-list.txt').read_text())
@@ -39,6 +39,19 @@ class ExecutionGateTests(unittest.TestCase):
         self.assertFalse(any(x['rule'] == 'lint_goals_required' for x in self.lint(direction='方向=观望｜进球=2-3')))
         self.assertTrue(any(x['rule'] == 'lint_goals_required' for x in self.lint(direction='方向=观望｜进球=不定｜抄盘时已开赛')))
         self.assertFalse(any(x['rule'] == 'lint_goals_required' for x in self.lint(direction='排除=暂缓｜理由=已开赛\n方向=观望｜进球=不定')))
+
+    def test_v18_goals_may_be_unestimated(self):
+        for value in ('未估', '弃权'):
+            self.assertFalse(any(x['rule'] == 'lint_goals_required' for x in self.lint(
+                direction=f'方向=观望｜进球={value}', rule_day='2026-11-12')))
+        self.assertTrue(any(x['rule'] == 'lint_goals_required' for x in self.lint(
+            direction='方向=观望｜进球=不定', rule_day='2026-11-12')))
+
+    def test_v18_star_and_market_difference_do_not_block(self):
+        direction = '方向=锁主｜进球=未估｜出票=可介入｜★★★☆☆\n【市场漏】押=主胜｜隐含=84%｜我估=78%'
+        rules = [x['rule'] for x in self.lint(direction=direction, rule_day='2026-11-12')]
+        self.assertNotIn('lint_star_gate', rules)
+        self.assertNotIn('lint_market_edge', rules)
 
     def test_candidate_and_status(self):
         self.assertTrue(any(x['rule'] == 'lint_candidate_order' for x in self.lint(
