@@ -119,6 +119,8 @@ RANGPING_STABLE_DAY = "2026-10-23"  # V17.4.94：让平禁进稳（只许博/大
 INJURY_CORE_DAY = "2026-10-23"  # V17.4.92：伤停理由排胜负边须【伤停排除】核心缺=｜打不了=；否则暂缓
 SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮须含净胜≥3
 V18_DAY = "2026-11-12"  # V18：旧概率补丁、固定返还与强制比分规则退出新稿
+PLAY_ROUTE_DAY = "2026-11-13"  # V18.1：候选须【玩法路由】+在售玩法SP；研究玩法与实际出票分层
+CONSERVATIVE_DAY = "2026-11-13"  # V18.1：λ区间+区间依据必填；保守P 须与角点法脚本一致（禁手填）
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
 LINEUP_GATE_DAY = "2026-09-22"  # 票面非空仓须【临场闸】（4.47）
@@ -163,6 +165,14 @@ _exec_spec = importlib.util.spec_from_file_location('lint_execution', os.path.jo
 _exec_module = importlib.util.module_from_spec(_exec_spec)
 _exec_spec.loader.exec_module(_exec_module)
 lint_execution = _exec_module.lint_execution
+
+_cons_spec = importlib.util.spec_from_file_location(
+    'conservative_probability', os.path.join(_SCRIPT_DIR, 'conservative_probability.py'))
+_cons_module = importlib.util.module_from_spec(_cons_spec)
+_cons_spec.loader.exec_module(_cons_module)
+conservative_model = _cons_module.conservative_model
+result_probabilities = _cons_module.result_probabilities
+score_matrix = _cons_module.score_matrix
 
 
 MATCH_CODE_RE = re.compile(r'周[一二三四五六日]\d{3}')
@@ -2835,6 +2845,241 @@ def lint_market_edge(sections: list[dict], day: str | None = None, filepath: str
     return warnings
 
 
+PLAY_SP_FIELD = {'胜平负': 'JC_SP=', '让球': 'HHAD_SP=', '总进球': 'TTG_SP=', '比分': 'CRS_SP='}
+PLAY_ROUTE_VALUES = set(PLAY_SP_FIELD) | {'观望'}
+RESEARCH_PLAY_REQUIRED = ('场次=', '选项=', 'EV=', '标签=')
+
+
+def _split_plays(text: str) -> list[str]:
+    return [t for t in re.split(r'[、,，/+]| \| ', text) if t]
+
+
+def lint_play_routing(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
+    """V18.1：候选须写【玩法路由】与在售玩法 SP 采集状态；【研究玩法】每行须带实际SP/EV/标签且不进票面。"""
+    out: list[dict] = []
+    if (day and day < PLAY_ROUTE_DAY) or not filepath:
+        return out
+    try:
+        content = open(filepath, encoding='utf-8').read()
+    except OSError:
+        return out
+
+    def err(match, message, severity='ERROR'):
+        out.append({'rule': 'lint_play_routing', 'severity': severity, 'match': match, 'message': message})
+
+    cand_m = re.search(r'【票面候选】([^\n]*)', content)
+    candidates = sorted(set(re.findall(r'(?<!\d)(\d{3})(?!\d)', cand_m.group(1).split('剔=', 1)[0]))) if cand_m else []
+    for num in candidates:
+        blob = '\n'.join(
+            '\n'.join(s['lines']) for s in sections
+            if re.search(rf'(?<!\d){num}(?!\d)', s['header'])
+        )
+        if not blob:
+            continue
+        rm = re.search(r'【玩法路由】([^\n]*)', blob)
+        if not rm:
+            err(f'候选{num}', '候选须写【玩法路由】路由=胜平负|让球|总进球|比分|观望｜依据=…（V18.1）')
+            routed = []
+        else:
+            line = rm.group(1)
+            vm = re.search(r'路由\s*=\s*([^｜|\n]*)', line)
+            routed = _split_plays(vm.group(1).strip()) if vm else []
+            bad = [t for t in routed if t not in PLAY_ROUTE_VALUES]
+            if not routed or bad:
+                err(f'候选{num}', f'【玩法路由】路由值非法：{vm.group(1).strip() if vm else "缺"}（须为 胜平负/让球/总进球/比分/观望）')
+                routed = [t for t in routed if t in PLAY_ROUTE_VALUES]
+            elif '观望' in routed and len(routed) > 1:
+                err(f'候选{num}', '路由=观望 不能与其他玩法并列；要么观望，要么点名价格线')
+            if not re.search(r'依据\s*=\s*[^｜|\n]*[^\s｜|]', line):
+                err(f'候选{num}', '【玩法路由】须写 依据=（结果清晰度/净胜清晰度/总λ稳定度）', 'WARN')
+        for play in dict.fromkeys(routed):
+            field = PLAY_SP_FIELD.get(play)
+            if not field:
+                continue
+            fm = re.search(rf'{field}([^\n]*)', blob)
+            if not fm:
+                err(f'候选{num}', f'路由到{play}但缺 {field}…；未开售也要写 {field}未开售')
+            elif '未开售' in fm.group(1):
+                err(f'候选{num}', f'路由到{play}而 {field}未开售；改路由或写观望', 'WARN')
+        sale = re.search(r'在售\s*=\s*([^｜|\n]*)', blob)
+        if not sale:
+            err(f'候选{num}', '缺 在售=…｜已采=…｜缺=…＋原因；未采齐在售玩法SP不得宣布“无可买”', 'WARN')
+        else:
+            for play in dict.fromkeys(_split_plays(sale.group(1).strip())):
+                field = PLAY_SP_FIELD.get(play)
+                if field and not re.search(rf'{field}', blob):
+                    err(f'候选{num}', f'在售含{play}但缺 {field}…（含采集时间；未开售写 未开售）')
+
+    in_ticket = False
+    for raw in content.splitlines():
+        line = raw.strip()
+        if '【今日票面】' in line:
+            in_ticket = True
+        if not line.startswith('研究玩法='):
+            continue
+        if in_ticket:
+            err('【今日票面】', '【研究玩法】不得写进票面块；实际出票须进 tickets.json 审计')
+            continue
+        body = line.split('=', 1)[1]
+        if re.fullmatch(r'\s*无\s*', body):
+            continue
+        missing = [f for f in RESEARCH_PLAY_REQUIRED if f not in line]
+        if missing:
+            err('研究玩法', f'研究玩法行缺 {"/".join(missing)}（须带场次/选项/EV/标签）')
+            continue
+        num_m = re.search(r'场次\s*=\s*(\d{3})', line)
+        if not num_m:
+            err('研究玩法', '研究玩法行 场次= 须为三位编号')
+        elif candidates and num_m.group(1) not in candidates:
+            err('研究玩法', f'研究玩法场次 {num_m.group(1)} 不在【票面候选】内')
+        if not re.search(r'标签\s*=\s*(?:非正EV|正EV)', line):
+            err('研究玩法', '研究玩法行须写 标签=非正EV|正EV（研究层不是投注建议）')
+        opt = re.search(r'选项\s*=\s*([^｜|\n]*)', line)
+        opt_txt = opt.group(1).strip() if opt else ''
+        ev_m = re.search(r'(?<!保守)EV\s*=\s*(-?\d+(?:\.\d+)?)\s*%', line)
+        if re.search(r'[+/、]', opt_txt):
+            if not re.search(r'档数\s*=\s*\d+', line):
+                err('研究玩法', f'复式“{opt_txt}”须写 档数=')
+            if not re.search(r'本金\s*=\s*\d+(?:\.\d+)?\s*元', line):
+                err('研究玩法', f'复式“{opt_txt}”须写 本金=（2元×档数×倍数）')
+            if not ev_m:
+                err('研究玩法', f'复式“{opt_txt}”须写 EV=Σ(p_i×SP_i)/档数-1')
+            continue
+        sp_m = re.search(r'实际SP\s*=\s*(\d+(?:\.\d+)?)', line)
+        p_m = re.search(r'p_model\s*=\s*(\d+(?:\.\d+)?)\s*%', line)
+        if not sp_m:
+            err('研究玩法', f'“{opt_txt}”须写 实际SP=（无价不成立）')
+        if not p_m:
+            err('研究玩法', f'“{opt_txt}”须写 p_model=NN%')
+        if not ev_m:
+            err('研究玩法', f'“{opt_txt}”须写 EV=NN%')
+        if sp_m and p_m and ev_m:
+            calc = float(p_m.group(1)) / 100 * float(sp_m.group(1)) - 1
+            if abs(calc * 100 - float(ev_m.group(1))) > 1.5:
+                err('研究玩法',
+                    f'EV 与 p×SP-1 不符：写 {ev_m.group(1)}%，算得 {calc * 100:.1f}%'
+                    f'（p={p_m.group(1)}%/SP={sp_m.group(1)}）')
+    return out
+
+
+_NUM = r'\d+(?:\.\d+)?'
+LAMBDA_H_RE = re.compile(rf'λ_H\s*=\s*({_NUM})')
+LAMBDA_A_RE = re.compile(rf'λ_A\s*=\s*({_NUM})')
+LAMBDA_INTERVAL_RE = re.compile(
+    rf'λ区间\s*=\s*H\s*\[\s*({_NUM})\s*[,，]\s*({_NUM})\s*\]\s*/\s*A\s*\[\s*({_NUM})\s*[,，]\s*({_NUM})\s*\]'
+)
+TRIPLE_PCT_RE = rf'({_NUM})\s*%\s*/\s*({_NUM})\s*%\s*/\s*({_NUM})\s*%'
+P_MODEL_RE = re.compile(rf'p_model_H/D/A\s*=\s*{TRIPLE_PCT_RE}')
+CONSERVATIVE_P_RE = re.compile(rf'保守P\s*=\s*{TRIPLE_PCT_RE}')
+OUTCOME_LABELS = ('主胜', '平', '客胜')
+CONSERVATIVE_TOLERANCE = 0.005  # 保守P 与角点法重算的容差：0.5pp
+P_MODEL_TOLERANCE = 0.01  # p_model 与 λ 重算的容差：1pp（λ 只写到两位小数）
+
+
+def lint_conservative_probability(sections: list[dict], day: str | None = None,
+                                  filepath: str | None = None) -> list[dict]:
+    """V18.1：候选须写 λ区间+区间依据；保守P 须由角点法脚本导出，lint 重算比对，禁手填。"""
+    out: list[dict] = []
+    if (day and day < CONSERVATIVE_DAY) or not filepath:
+        return out
+    try:
+        content = open(filepath, encoding='utf-8').read()
+    except OSError:
+        return out
+
+    def err(match, message, severity='ERROR'):
+        out.append({'rule': 'lint_conservative_probability', 'severity': severity,
+                    'match': match, 'message': message})
+
+    cand_m = re.search(r'【票面候选】([^\n]*)', content)
+    candidates = sorted(set(re.findall(r'(?<!\d)(\d{3})(?!\d)',
+                                       cand_m.group(1).split('剔=', 1)[0]))) if cand_m else []
+    # 保守EV>0 是唯一硬出票闸，所以进了票的场次不许用 null 绕过；未进票的候选允许「未估」
+    ticketed: set[str] = set()
+    for line in _ticket_lines(content):
+        if not re.search(r'=\s*空', line):
+            ticketed.update(re.findall(r'(?<!\d)(\d{3})(?!\d)', line.split('弃因=', 1)[0]))
+    for num in candidates:
+        blob = '\n'.join(
+            '\n'.join(s['lines']) for s in sections
+            if re.search(rf'(?<!\d){num}(?!\d)', s['header'])
+        )
+        if not blob:
+            continue
+        tag = f'候选{num}'
+
+        # p_model 与 保守P 只在【统一概率】那一行取，避免误读【市场与EV】的单选项 保守P=
+        pm_line_m = re.search(r'^[^\n]*p_model_H/D/A\s*=[^\n]*$', blob, re.M)
+        pm_line = pm_line_m.group(0) if pm_line_m else ''
+        pm_m = P_MODEL_RE.search(pm_line)
+        if not pm_m:
+            if CONSERVATIVE_P_RE.search(pm_line):
+                err(tag, 'p_model_H/D/A 缺失或为 null 时不得给 保守P 数值；未估就整行写 null')
+            elif num in ticketed:
+                err(tag, '已进票却缺 p_model_H/D/A=三个百分数；保守EV 是唯一出票闸，'
+                         'null 无法审计，须先估 λ 再用角点法导出保守P')
+            continue
+        p_model = tuple(float(g) / 100 for g in pm_m.groups())
+
+        lam_h_m, lam_a_m = LAMBDA_H_RE.search(blob), LAMBDA_A_RE.search(blob)
+        if not lam_h_m or not lam_a_m:
+            err(tag, '有 p_model 但缺 λ_H= 或 λ_A=；概率须可追溯到 λ，不得直接写结论')
+            continue
+        lam_h, lam_a = float(lam_h_m.group(1)), float(lam_a_m.group(1))
+
+        if not re.search(r'λ区间\s*=', blob):
+            err(tag, '缺 λ区间=H[lo,hi]/A[lo,hi]；保守P 由角点法导出，无区间无法重算')
+            interval = None
+        else:
+            iv_m = LAMBDA_INTERVAL_RE.search(blob)
+            if not iv_m:
+                err(tag, 'λ区间= 须写成 H[lo,hi]/A[lo,hi] 四个数')
+                interval = None
+            else:
+                interval = tuple(float(g) for g in iv_m.groups())
+                h_lo, h_hi, a_lo, a_hi = interval
+                if not (h_lo < h_hi and a_lo < a_hi):
+                    err(tag, f'λ区间上下界写反或相等：H[{h_lo},{h_hi}]/A[{a_lo},{a_hi}]')
+                    interval = None
+                elif not (h_lo <= lam_h <= h_hi and a_lo <= lam_a <= a_hi):
+                    err(tag, f'λ 点估计须落在区间内：λ_H={lam_h} vs H[{h_lo},{h_hi}]，'
+                             f'λ_A={lam_a} vs A[{a_lo},{a_hi}]')
+                    interval = None
+        if interval and not re.search(r'区间依据\s*=\s*[^｜|\n]*[^\s｜|]', blob):
+            err(tag, '缺 区间依据=（样本n+口径+阵容）；λ区间直接决定能否出票，不得为过闸收窄')
+
+        if not re.search(r'保守P\s*=', pm_line):
+            err(tag, '缺 保守P=主/平/客；须用 scripts/conservative_probability.py 角点法导出，禁手填')
+            continue
+        cons_m = CONSERVATIVE_P_RE.search(pm_line)
+        if not cons_m:
+            err(tag, '保守P= 须写成三个百分数，如 39.3%/22.2%/16.9%')
+            continue
+        cons = tuple(float(g) / 100 for g in cons_m.groups())
+
+        for label, c, p in zip(OUTCOME_LABELS, cons, p_model):
+            if c > p + 1e-9:
+                err(tag, f'保守P({label})={c * 100:.1f}% 高于 p_model={p * 100:.1f}%；保守不得比点估计乐观')
+
+        if not interval:
+            continue
+        try:
+            expected = conservative_model(lam_h, lam_a, *interval)['result']
+        except ValueError as exc:
+            err(tag, f'角点法重算失败：{exc}')
+            continue
+        for label, wrote, want in zip(OUTCOME_LABELS, cons, expected):
+            if abs(wrote - want) > CONSERVATIVE_TOLERANCE:
+                err(tag, f'保守P({label}) 写 {wrote * 100:.1f}%，角点法算得 {want * 100:.1f}%'
+                         f'（容差 {CONSERVATIVE_TOLERANCE * 100:.1f}pp）；须照抄脚本输出，禁手填')
+        point = result_probabilities(score_matrix(lam_h, lam_a))
+        for label, wrote, want in zip(OUTCOME_LABELS, p_model, point):
+            if abs(wrote - want) > P_MODEL_TOLERANCE:
+                err(tag, f'p_model({label}) 写 {wrote * 100:.1f}%，由 λ_H={lam_h}/λ_A={lam_a} '
+                         f'算得 {want * 100:.1f}%；概率须与 λ 同源', 'WARN')
+    return out
+
+
 def run_lint(filepath: str, day: str | None = None) -> dict:
     """运行全部 lint 规则，返回报告。"""
     if day is None:
@@ -2842,7 +3087,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
     print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, HUB_PAIR={HUB_PAIR_DAY}, EDGE_HUB={EDGE_HUB_DAY}, MARKET_EDGE={MARKET_EDGE_DAY}, PLAY_FREE={PLAY_FREE_DAY}, DOUBLE={DOUBLE_DAY}, STYLE_FETCH={STYLE_FETCH_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, HUB_PAIR={HUB_PAIR_DAY}, EDGE_HUB={EDGE_HUB_DAY}, MARKET_EDGE={MARKET_EDGE_DAY}, PLAY_FREE={PLAY_FREE_DAY}, DOUBLE={DOUBLE_DAY}, STYLE_FETCH={STYLE_FETCH_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}, PLAY_ROUTE={PLAY_ROUTE_DAY}, CONSERVATIVE={CONSERVATIVE_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -3016,6 +3261,24 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
                 print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
         else:
             print(f"\n[lint_market_edge] ✓ 通过")
+
+        w_route = lint_play_routing(sections, day, filepath=filepath)
+        all_warnings.extend(w_route)
+        if w_route:
+            print(f"\n[lint_play_routing] 发现 {len(w_route)} 个问题:")
+            for item in w_route:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_play_routing] ✓ 通过")
+
+        w_cons = lint_conservative_probability(sections, day, filepath=filepath)
+        all_warnings.extend(w_cons)
+        if w_cons:
+            print(f"\n[lint_conservative_probability] 发现 {len(w_cons)} 个问题:")
+            for item in w_cons:
+                print(f"  [{item['severity']}] {item['match'][:50]:50s} {item['message']}")
+        else:
+            print(f"\n[lint_conservative_probability] ✓ 通过")
 
         w_exec = lint_execution(sections, day, filepath)
         all_warnings.extend(w_exec)
@@ -3959,7 +4222,54 @@ def _self_check() -> None:
                      '| 001 | 甲 vs 乙 | 客胜 | 锁主 | 主胜 | 未估 | 未估 | 弃权 | 主胜/未估 |\n')
     assert _lint_forced_col(forced18_text, day=V18_DAY) == []
 
-    print('self-check historical gates + V18 EV/optional-score rules: ok')
+    # V18.1：玩法路由 + 在售SP采齐 + 研究玩法与实际出票分层
+    route_base = (
+        '【票面候选】≤3｜005｜001｜剔=其余\n'
+        '## 周四005 甲 vs 乙\n'
+        'JC_SP=2.10/3.40/3.30｜SP_TS=2026-11-13T10:00+08\n'
+        'HHAD_SP=未开售｜让球线=·｜SP_TS=·\n'
+        'TTG_SP=1.95｜SP_TS=2026-11-13T10:00+08\n'
+        'CRS_SP=未开售｜SP_TS=·\n'
+        '在售=胜平负、总进球｜已采=胜平负、总进球｜缺=让球、比分（未开售）\n'
+        '【玩法路由】路由=总进球｜依据=方向分不清/总λ稳｜总λ=3.16\n'
+        '研究玩法=总进球｜场次=005｜选项=4-5球｜实际SP=1.95｜p_model=38.0%｜EV=-25.9%｜保守EV=-31.0%｜标签=非正EV\n'
+        '## 周四001 丙 vs 丁\n'
+        'JC_SP=1.80/3.50/4.20｜SP_TS=·\n'
+        '在售=胜平负｜已采=胜平负｜缺=无\n'
+        '【玩法路由】路由=胜平负｜依据=方向清/净胜不清｜总λ=2.40\n'
+        '研究玩法=胜平负复式｜场次=001｜选项=平+客胜｜档数=2｜本金=4元｜命中概率=83.1%｜EV=-9.4%｜标签=非正EV\n'
+        '【今日票面】\n方案=空仓｜弃因=保守EV不足\n'
+    )
+
+    def route(text, d=PLAY_ROUTE_DAY):
+        with tempfile.NamedTemporaryFile('w', encoding='utf-8', suffix='.md', delete=False) as tf:
+            tf.write(text)
+            fp = tf.name
+        try:
+            return lint_play_routing(parse_sections(fp), day=d, filepath=fp)
+        finally:
+            os.unlink(fp)
+
+    base_route = route(route_base)
+    assert [w for w in base_route if w['severity'] == 'ERROR'] == [], base_route
+    assert route(route_base, d=V18_DAY) == []
+    assert any('玩法路由' in w['message'] for w in route(route_base.replace(
+        '【玩法路由】路由=总进球｜依据=方向分不清/总λ稳｜总λ=3.16\n', '')))
+    assert any('TTG_SP' in w['message'] for w in route(route_base.replace(
+        'TTG_SP=1.95｜SP_TS=2026-11-13T10:00+08\n', '')))
+    assert any('标签' in w['message'] for w in route(route_base.replace('｜标签=非正EV\n', '\n', 1)))
+    assert any('不符' in w['message'] for w in route(route_base.replace('EV=-25.9%', 'EV=-5.0%', 1)))
+    assert any('档数' in w['message'] for w in route(route_base.replace('｜档数=2', '')))
+    assert any('票面' in w['message'] for w in route(route_base.replace(
+        '【今日票面】\n方案=空仓',
+        '【今日票面】\n研究玩法=总进球｜场次=005｜选项=4-5球｜实际SP=1.95｜p_model=38.0%｜EV=-25.9%｜标签=非正EV\n方案=空仓')))
+    assert any(w['severity'] == 'ERROR' and '观望' in w['message'] for w in route(route_base.replace(
+        '路由=总进球｜', '路由=观望、总进球｜')))
+    assert any(w['severity'] == 'WARN' and '未开售' in w['message'] for w in route(route_base.replace(
+        '路由=总进球｜', '路由=让球、总进球｜')))
+    assert any('不在【票面候选】' in w['message'] for w in route(route_base.replace('场次=005', '场次=009')))
+
+    print('self-check historical gates + V18 EV/optional-score + V18.1 play-routing rules: ok')
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 LEGACY = {"【(?:让球稳健推荐|让球胜平负单选)】", "【方向三步】", "【比分推荐.*?】", "【让球胜平负单选】"}
 FIELDS = ["交卷模式=", "初盘=", "冻排=", "情报档=", "排除=", "质疑=", "弱置信=", "对照盘口修订=",
-          "λ校准=", "出票通道=", "预算=", "席=", "买=", "盘口=", "荐="]
+          "λ校准=", "λ区间=", "区间依据=", "保守P=", "出票通道=", "预算=", "席=", "买=", "盘口=", "荐="]
 
 skill = (ROOT / "SKILL.md").read_text()
 pack = skill + (ROOT / "output-template.md").read_text()
@@ -31,7 +31,7 @@ for source in (ROOT / "references").rglob("*"):
         packaged = PKG / "references" / source.relative_to(ROOT / "references")
         if not packaged.is_file() or source.read_bytes() != packaged.read_bytes():
             errors.append(f"pack mismatch: references/{source.relative_to(ROOT / 'references')}")
-for name in ("lint_draft.py", "lint_execution.py", "check_day.py", "structure_gate.py", "deep_away_trap.py", "gen_rma_detail_table.py", "audit_delivery.py", "probability_model.py"):
+for name in ("lint_draft.py", "lint_execution.py", "check_day.py", "structure_gate.py", "deep_away_trap.py", "gen_rma_detail_table.py", "audit_delivery.py", "probability_model.py", "conservative_probability.py", "score_ledger.py"):
     source, packaged = ROOT / "scripts" / name, PKG / "scripts" / name
     if not packaged.is_file() or source.read_bytes() != packaged.read_bytes():
         errors.append(f"pack mismatch: scripts/{name}")

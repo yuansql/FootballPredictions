@@ -100,8 +100,19 @@ def check_ticket(ticket, index, candidates, watch):
     legs = ticket.get('legs')
     if not isinstance(legs, list) or len(legs) < 2:
         return [f'{label} 默认至少两场，legs 至少两项']
-    if ticket.get('joint_probability') not in ('独立近似', '保守调整'):
+    joint = ticket.get('joint_probability')
+    if joint not in ('独立近似', '保守调整'):
         errors.append(f'{label} joint_probability 须为独立近似或保守调整')
+    rho = Decimal('1')
+    raw_rho = ticket.get('rho')
+    if joint == '保守调整' and raw_rho is None:
+        errors.append(f'{label} 保守调整须写 rho（数值或“未标定”）')
+    elif raw_rho is not None and str(raw_rho).strip() != '未标定':
+        number = dec(raw_rho, f'{label} rho', [])
+        if number is None or number <= 0 or number > 1:
+            errors.append(f'{label} rho 须在 0..1 或写“未标定”: {raw_rho!r}')
+        else:
+            rho = number
     ids = []
     combos = [(Decimal('1'), Decimal('1'), Decimal('1'))]
     count = 1
@@ -167,7 +178,7 @@ def check_ticket(ticket, index, candidates, watch):
     expected_return = sum((p_model * MONEY * multiple * product
                            for product, p_model, _ in combos), Decimal('0'))
     conservative_return = sum((p_conservative * MONEY * multiple * product
-                               for product, _, p_conservative in combos), Decimal('0'))
+                               for product, _, p_conservative in combos), Decimal('0')) * rho
     ev = expected_return / stake - 1
     conservative_ev = conservative_return / stake - 1
     if conservative_ev <= 0:
@@ -210,8 +221,19 @@ def ticket_audit(day_dir, draft, manifest):
     names = [t.get('name') for t in tickets if isinstance(t, dict)]
     if len(names) != len(set(names)) or any(n not in ('稳', '博') for n in names):
         errors.append('默认每晚最多一张稳和一张博；票名不得重复')
+    declared_joint = set(re.findall(r'联合概率\s*=\s*(独立近似|保守调整)', ticket_block))
     for i, ticket in enumerate(tickets, 1):
         errors.extend(check_ticket(ticket, i, candidates, watch))
+        if not isinstance(ticket, dict):
+            continue
+        joint = ticket.get('joint_probability')
+        if joint not in ('独立近似', '保守调整'):
+            continue
+        if len(declared_joint) == 1 and joint not in declared_joint:
+            errors.append(f'票 {i} joint_probability={joint} 与 01【今日票面】'
+                          f'联合概率={next(iter(declared_joint))} 不一致')
+        if joint == '保守调整' and not re.search(r'ρ\s*=', ticket_block):
+            errors.append(f'票 {i} 为保守调整，01【今日票面】须写 ρ=数值|未标定')
     return errors
 
 

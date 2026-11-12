@@ -61,6 +61,34 @@ class AuditTests(unittest.TestCase):
         self.assertTrue(any('p_model' in error for error in errors), errors)
         self.assertTrue(any('保守概率不得高于模型概率' in error for error in errors), errors)
 
+    def test_rho_scales_conservative_ev(self):
+        ticket = self.ticket()
+        ticket['tickets'][0]['joint_probability'] = '保守调整'
+        errors = ticket_audit(self.day, self.draft, ticket)
+        self.assertTrue(any('rho' in error for error in errors), errors)
+
+        self.draft.write_text(self.draft.read_text(encoding='utf-8').replace(
+            '联合概率=独立近似', '联合概率=保守调整｜ρ=未标定'), encoding='utf-8')
+        ticket['tickets'][0]['rho'] = '未标定'
+        self.assertEqual(ticket_audit(self.day, self.draft, ticket), [])
+
+        ticket['tickets'][0]['rho'] = '1.5'
+        errors = ticket_audit(self.day, self.draft, ticket)
+        self.assertTrue(any('rho 须在 0..1' in error for error in errors), errors)
+
+        # 未标定按 1.0 处理：保守EV=+58.4%；ρ=0.5 后同一张票必须被拒
+        ticket['tickets'][0]['rho'] = '0.5'
+        errors = ticket_audit(self.day, self.draft, ticket)
+        self.assertTrue(any('保守EV=' in error for error in errors), errors)
+
+    def test_joint_probability_must_match_draft(self):
+        ticket = self.ticket()
+        ticket['tickets'][0]['joint_probability'] = '保守调整'
+        ticket['tickets'][0]['rho'] = '未标定'
+        errors = ticket_audit(self.day, self.draft, ticket)
+        self.assertTrue(any('不一致' in error for error in errors), errors)
+        self.assertTrue(any('ρ=数值|未标定' in error for error in errors), errors)
+
     def test_watch_and_same_match_rejected(self):
         text = self.draft.read_text().replace('方向=锁客｜倾向=客胜', '方向=观望｜倾向=不定｜弃因=无一侧')
         self.draft.write_text(text)
