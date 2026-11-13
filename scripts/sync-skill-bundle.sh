@@ -101,8 +101,8 @@ if [[ "$LOCAL" -eq 1 ]]; then
   AGENTS="$HOME/.agents/skills/football-predict-v17"
   mkdir -p "$AGENTS"
   sync_local_skill "$AGENTS"
-  echo "OK also synced → $AGENTS"
-  echo "OK synced → $REF + 本机 Cursor ($CUR 与 ~/.cursor/skills/football-predict-v17)"
+  echo "OK also synced → ${AGENTS}"
+  echo "OK synced → ${REF} + 本机 Cursor (${CUR} 与 ~/.cursor/skills/football-predict-v17)"
 else
-  echo "OK synced → $REF（--no-local 未装本机）"
+  echo "OK synced → ${REF}（--no-local 未装本机）"
 fi
