@@ -69,7 +69,7 @@ rm -f \
 [[ -f "$ROOT/使用.md" ]] && cp "$ROOT/使用.md" "$PKG/使用.md"
 [[ -f "$ROOT/SYNC_STAMP.txt" ]] && cp "$ROOT/SYNC_STAMP.txt" "$PKG/SYNC_STAMP.txt"
 
-SCRIPTS=(lint_draft.py lint_execution.py check_day.py structure_gate.py deep_away_trap.py gen_rma_detail_table.py audit_delivery.py probability_model.py conservative_probability.py score_ledger.py)
+SCRIPTS=(lint_draft.py lint_execution.py check_day.py structure_gate.py deep_away_trap.py gen_rma_detail_table.py audit_delivery.py probability_model.py conservative_probability.py score_ledger.py lambda_sheet.py)
 for s in "${SCRIPTS[@]}"; do
   cp "$ROOT/scripts/$s" "$PKG/scripts/$s"
 done
@@ -102,6 +102,14 @@ if [[ "$LOCAL" -eq 1 ]]; then
   mkdir -p "$AGENTS"
   sync_local_skill "$AGENTS"
   echo "OK also synced → ${AGENTS}"
+  STORE_BASE="$HOME/Library/Application Support/Cursor/AgentStores/cursor_agent_stores"
+  shopt -s nullglob
+  for skills_dir in "$STORE_BASE"/*/files/skills; do
+    if [[ -d "$skills_dir/football-predict-v17" ]]; then
+      sync_local_skill "$skills_dir/football-predict-v17"
+      echo "OK also synced → ${skills_dir}/football-predict-v17"
+    fi
+  done
   echo "OK synced → ${REF} + 本机 Cursor (${CUR} 与 ~/.cursor/skills/football-predict-v17)"
 else
   echo "OK synced → ${REF}（--no-local 未装本机）"

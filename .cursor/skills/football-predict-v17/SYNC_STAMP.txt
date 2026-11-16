@@ -1,4 +1,8 @@
 # football-predict-v17 sync stamp
+synced_at: 2026-11-13 15:21:00
+version_note: 分析优先版替换 V17.4.99 正文（亲爱的点名把戳记、个人 store、日夹家规对齐）：默认研究5场；同一比分矩阵、实际SP、真实EV、保守EV决定出票；不写01a/过程稿/_raw，不做赛前lint与冻结。同步增加个人 store `AgentStores/.../files/skills/football-predict-v17`。此前戳记停在 2026-11-04 的 V17.4.99。
+
+# football-predict-v17 sync stamp
 synced_at: 2026-11-04 11:05:00
 version_note: V17.4.99 没有一侧写观望（亲爱的「如何调整」后点名改、同步、上传）：方向=观望、倾向=不定、强制=不定，须一句弃因；不进推的准确率，不进票；禁止硬装成不败或主胜。lint WATCH_PUSH_DAY=2026-11-04。
 
