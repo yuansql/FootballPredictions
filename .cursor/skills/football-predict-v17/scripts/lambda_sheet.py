@@ -18,7 +18,7 @@ def _positive(name, value, lo=0.0, hi=None):
     return value
 
 
-def uncertainty(n, lineup_unknown, friendly):
+def uncertainty(n, lineup_unknown, friendly, collapse_risk=False):
     u = 0.15
     if n < 8:
         u += 0.05
@@ -26,7 +26,9 @@ def uncertainty(n, lineup_unknown, friendly):
         u += 0.05
     if friendly:
         u += 0.05
-    return min(u, 0.35)
+    if collapse_risk:
+        u += 0.05
+    return min(u, 0.40)
 
 
 def main(argv=None):
@@ -43,6 +45,8 @@ def main(argv=None):
     p.add_argument('--n-a', type=float, default=10, help='客队口径样本场次')
     p.add_argument('--lineup-unknown', action='store_true', help='关键阵容/首发未确认')
     p.add_argument('--friendly', action='store_true', help='友谊赛或大幅轮换预期')
+    p.add_argument('--collapse-risk', action='store_true',
+                   help='同一功能单元≥2主力缺阵；adj 上限放宽至 1.45，u 额外 +0.05')
     args = p.parse_args(argv)
 
     lg_h = _positive('--league-home', args.league_home, 0.2, 3.0)
@@ -51,13 +55,14 @@ def main(argv=None):
     def_h = _positive('--def-h', args.def_h, 0.2, 3.0)
     att_a = _positive('--att-a', args.att_a, 0.2, 3.0)
     def_a = _positive('--def-a', args.def_a, 0.2, 3.0)
-    adj_h = _positive('--adj-h', args.adj_h, 0.69, 1.31)
-    adj_a = _positive('--adj-a', args.adj_a, 0.69, 1.31)
+    adj_lo, adj_hi = (0.54, 1.46) if args.collapse_risk else (0.69, 1.31)
+    adj_h = _positive('--adj-h', args.adj_h, adj_lo, adj_hi)
+    adj_a = _positive('--adj-a', args.adj_a, adj_lo, adj_hi)
 
     lam_h = lg_h * att_h * def_a * adj_h
     lam_a = lg_a * att_a * def_h * adj_a
-    u_h = uncertainty(args.n_h, args.lineup_unknown, args.friendly)
-    u_a = uncertainty(args.n_a, args.lineup_unknown, args.friendly)
+    u_h = uncertainty(args.n_h, args.lineup_unknown, args.friendly, args.collapse_risk)
+    u_a = uncertainty(args.n_a, args.lineup_unknown, args.friendly, args.collapse_risk)
     h_lo, h_hi = max(0.05, lam_h * (1 - u_h)), lam_h * (1 + u_h)
     a_lo, a_hi = max(0.05, lam_a * (1 - u_a)), lam_a * (1 + u_a)
 
