@@ -101,6 +101,7 @@ date,match,lam_h,lam_a,pH,pD,pA,consH,consD,consA,direction,pick,sp_taken,ev,con
 ```
 
 - `score` 赛后补 `2-1` 这类比分；`ticket` 填 是/否；未出票也要记，空仓场是校准数据的一部分。
+- 未出票也要把赛前方向内最想买的选项写进 `pick/sp_taken/ev/cons_ev`，用 `ticket=否` 区分「没真买」；字段留空会让复盘脚本无法统计该场命中与组票模拟。
 - 复盘用这批 CSV 批量做：运行 `python3 scripts/score_ledger_lite.py <pred-ledger.csv>` 出 Brier/LogLoss、单选命中、二串一模拟盈亏，另行发起，不占用当场分析时间。
 - 没有这行账本，就不允许宣称「λ 准」「保守闸太严/太松」——一切校准结论以账本为准。
 
