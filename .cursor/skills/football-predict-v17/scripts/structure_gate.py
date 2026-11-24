@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 """
-structure_gate.py — V17.4.23 低结构平优先闸
+structure_gate.py — V17.4.100 低结构平优先闸 + 镜像场量化闸
 
 功能：
 1. 根据竞彩 SP (主/平/客) 计算结构风险标签
 2. 低结构仅提示风险，不按较低 SP 强制输出不败或倾向
 3. 历史复盘：只列出结构信号，不模拟方向变化或准确率
+4. 镜像场闸（V17.4.100）：λ_H 与 λ_A 相对差 <10% → 方向只能观望/平局打底，
+   禁按叙事冻主不败/客不败。依据：2026-11-23 蒙扎(λ2.04/2.02 冻客不败, 3-0 穿)
+   与 08-27 塞尔塔/费伦茨同族（V17.4.99「分不清不得硬装」的量化落地）。
 
 用法：
     python3 structure_gate.py --backtest <复盘文件.md>
     python3 structure_gate.py --tag <P_H> <P_D> <P_A>
+    python3 structure_gate.py --mirror <λ_H> <λ_A>
     python3 structure_gate.py --lint <草稿文件.md>
 
 阈值（可调）：
     DRAW_PRIORITY_THRESHOLD = 0.10   # |P_H - P_A| < 10% → draw_priority
     LOW_STRUCTURE_EPSILON = 0.15     # 传统低结构阈值
+    MIRROR_LAMBDA_THRESHOLD = 0.10   # |λ_H-λ_A|/max(λ) < 10% → 镜像场
 """
 
 import sys
@@ -25,6 +30,7 @@ from typing import Tuple, Literal
 # === 可调阈值 ===
 DRAW_PRIORITY_THRESHOLD = 0.10   # |P(主) - P(客)| < 10% → 平优先闸
 LOW_STRUCTURE_EPSILON = 0.15     # 传统低结构判定
+MIRROR_LAMBDA_THRESHOLD = 0.10   # λ 相对差 < 10% → 镜像场（V17.4.100）
 
 # === 结构标签枚举 ===
 StructureTag = Literal["high_structure", "low_structure", "draw_priority"]
@@ -66,6 +72,19 @@ def get_enforced_direction(sp_h: float, sp_d: float, sp_a: float) -> Tuple[str, 
     """
     # 保留旧接口供历史回测调用，但禁止市场价格直接生成方向。
     return None, None
+
+
+def mirror_gate(lam_h: float, lam_a: float) -> bool:
+    """
+    镜像场闸（V17.4.100）：λ_H 与 λ_A 相对差 < MIRROR_LAMBDA_THRESHOLD。
+
+    镜像场 = 量化意义上的「没有优势侧」（V17.4.99 的判据落地）：
+    方向只能观望（或用户指定时平局打底），禁按叙事冻主不败/客不败。
+    """
+    if lam_h <= 0 or lam_a <= 0:
+        return False
+    rel = abs(lam_h - lam_a) / max(lam_h, lam_a)
+    return rel < MIRROR_LAMBDA_THRESHOLD
 
 
 def parse_sp_line(line: str) -> Tuple[float, float, float] | None:
@@ -224,15 +243,53 @@ def run_lint(filepath: str) -> None:
                     print(f"       原文: {direction_line[:100]}")
                     warnings += 1
 
+        # === 镜像场量化闸（V17.4.100） ===
+        lam_m_h = None
+        lam_m_a = None
+        for line in lines:
+            m_h = re.search(r'λ_H\s*=\s*(\d+(?:\.\d+)?)', line)
+            m_a = re.search(r'λ_A\s*=\s*(\d+(?:\.\d+)?)', line)
+            if m_h and m_a:
+                lam_m_h, lam_m_a = float(m_h.group(1)), float(m_a.group(1))
+                break
+        if lam_m_h and lam_m_a and mirror_gate(lam_m_h, lam_m_a):
+            # 找方向行（兼容 方向= / 冻向= 两种写法）
+            dir_word = None
+            for line in lines:
+                m = re.search(r'(?:方向|冻向)\s*=\s*(锁主|锁客|锁平|主不败|客不败|观望)', line)
+                if m:
+                    dir_word = m.group(1)
+                    break
+            if dir_word in ('主不败', '客不败', '锁主', '锁客'):
+                rel = abs(lam_m_h - lam_m_a) / max(lam_m_h, lam_m_a) * 100
+                print(f"[ERROR] 镜像场禁单边档: {header[:50]}")
+                print(f"        λ_H={lam_m_h:.2f}/λ_A={lam_m_a:.2f} 相对差 {rel:.1f}%"
+                      f"（<{MIRROR_LAMBDA_THRESHOLD*100:.0f}%）却冻 {dir_word}")
+                print(f"        只许观望或平局打底；须写一行 λ_mirror=触发｜相对差={rel:.1f}%（V17.4.100）")
+                warnings += 1
+
     print(f"\n=== lint 结果 ===")
     print(f"警告数: {warnings}")
     if warnings == 0:
-        print("未发现低结构硬焊问题 ✓")
+        print("未发现低结构硬焊/镜像场压边问题 ✓")
+
+
+def run_mirror(lam_h: float, lam_a: float) -> None:
+    """单场镜像场判定。"""
+    rel = abs(lam_h - lam_a) / max(lam_h, lam_a) * 100
+    is_mirror = mirror_gate(lam_h, lam_a)
+    print(f"λ_H={lam_h:.2f} / λ_A={lam_a:.2f}")
+    print(f"相对差: {rel:.1f}%（阈值 {MIRROR_LAMBDA_THRESHOLD*100:.0f}%）")
+    if is_mirror:
+        print("判定: 镜像场 → 方向只能观望或平局打底，禁主不败/客不败叙事档（V17.4.100）")
+        print("触发时正文须写一行 λ_mirror=触发｜相对差=X%")
+    else:
+        print("判定: 非镜像场，方向档不受镜像闸限制")
 
 
 # === CLI ===
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V17.4.23 低结构平优先闸")
+    parser = argparse.ArgumentParser(description="V17.4.100 低结构平优先闸 + 镜像场量化闸")
     sub = parser.add_subparsers(dest='cmd')
 
     p_backtest = sub.add_parser('backtest', help='对复盘文件跑回测')
@@ -243,6 +300,10 @@ if __name__ == "__main__":
     p_tag.add_argument('p_d', type=float, help='平局概率/SP')
     p_tag.add_argument('p_a', type=float, help='客胜概率/SP')
 
+    p_mirror = sub.add_parser('mirror', help='单场镜像场判定')
+    p_mirror.add_argument('lam_h', type=float, help='λ_H')
+    p_mirror.add_argument('lam_a', type=float, help='λ_A')
+
     p_lint = sub.add_parser('lint', help='扫描草稿文件')
     p_lint.add_argument('file', help='草稿 markdown 文件路径')
 
@@ -252,6 +313,8 @@ if __name__ == "__main__":
         run_backtest(args.file)
     elif args.cmd == 'tag':
         run_tag(args.p_h, args.p_d, args.p_a)
+    elif args.cmd == 'mirror':
+        run_mirror(args.lam_h, args.lam_a)
     elif args.cmd == 'lint':
         run_lint(args.file)
     else:

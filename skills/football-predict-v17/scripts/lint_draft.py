@@ -121,6 +121,10 @@ SCORE_PACK_DAY = "2026-10-16"  # V17.4.77：锁*/深让可锁/屠杀档比分篮
 V18_DAY = "2026-11-12"  # V18：旧概率补丁、固定返还与强制比分规则退出新稿
 PLAY_ROUTE_DAY = "2026-11-13"  # V18.1：候选须【玩法路由】+在售玩法SP；研究玩法与实际出票分层
 CONSERVATIVE_DAY = "2026-11-13"  # V18.1：λ区间+区间依据必填；保守P 须与角点法脚本一致（禁手填）
+MIRROR_DIRECTION_DAY = "2026-11-24"  # V17.4.100：镜像场（λ相对差<10%）禁主不败/客不败叙事档（4.99 量化落地）
+MASSACRE_BRACKET_DAY = "2026-11-24"  # V17.4.100：让球≥1且让球侧=λ优势侧→比分篮须含该侧净胜≥3格（承4.26/4.77，升ERROR）
+MODEL_ARGMAX_DAY = "2026-11-24"  # V17.4.100 shadow：方向档允许集不含p_model最高项→WARN（同类≥2才立硬闸）
+MIRROR_LAMBDA_REL = 0.10  # 镜像场阈值：|λ_H-λ_A|/max(λ) < 10%
 CANDIDATE_FIRST_DAY = "2026-10-13"  # V17.4.71：先【票面候选】再认真拆；票腿⊆候选
 PROCESS_FILE_DAY = "2026-10-15"  # V17.4.72：候选须 01a 过程旁稿 + 过程= 链
 LINEUP_GATE_DAY = "2026-09-22"  # 票面非空仓须【临场闸】（4.47）
@@ -2238,6 +2242,180 @@ def lint_score_pack(sections: list[dict], day: str | None = None) -> list[dict]:
     return warnings
 
 
+def _parse_lambdas(blob: str):
+    """从场次段提取 (λ_H, λ_A)；找不到返回 None。"""
+    m_h = re.search(r'λ_H\s*=\s*(\d+(?:\.\d+)?)', blob)
+    m_a = re.search(r'λ_A\s*=\s*(\d+(?:\.\d+)?)', blob)
+    if not (m_h and m_a):
+        return None
+    lh, la = float(m_h.group(1)), float(m_a.group(1))
+    if lh <= 0 or la <= 0:
+        return None
+    return lh, la
+
+
+def _parse_direction_word(blob: str):
+    """从场次段提取方向原子（兼容 方向=/冻向=/推方向=）。"""
+    m = re.search(
+        r'(?:方向|冻向|推方向)\s*=\s*(锁主|锁客|锁平|主不败|客不败|观望)', blob)
+    return m.group(1) if m else None
+
+
+def lint_mirror_direction(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.100：λ 镜像场（相对差 < MIRROR_LAMBDA_REL）禁单边档。
+
+    镜像场 = 「没有优势侧」的量化判据（V17.4.99 落地）：
+    方向只能观望（或用户指定时平局打底），禁按叙事冻主不败/客不败/锁单边。
+    依据：2026-11-23 蒙扎 λ 2.04/2.02 冻客不败，3-0 穿（miss_class=A，
+    反证已识别未吸收）；08-27 塞尔塔/费伦茨同族（V17.4.21 修过一次，换皮复发）。
+    触发时正文须写一行 λ_mirror=触发｜相对差=X%。
+    """
+    if not day or day < MIRROR_DIRECTION_DAY:
+        return []
+    out = []
+    for sec in sections:
+        blob = '\n'.join(sec.get('lines') or [])
+        header = sec.get('header') or ''
+        lam = _parse_lambdas(blob)
+        if not lam:
+            continue
+        lh, la = lam
+        rel = abs(lh - la) / max(lh, la)
+        if rel >= MIRROR_LAMBDA_REL:
+            continue
+        dir_word = _parse_direction_word(blob)
+        if dir_word in ('主不败', '客不败', '锁主', '锁客'):
+            out.append({
+                'rule': 'lint_mirror_direction',
+                'severity': 'ERROR',
+                'match': header[:50],
+                'message': (
+                    f'λ_H={lh:.2f}/λ_A={la:.2f} 相对差 {rel*100:.1f}%'
+                    f'（镜像场）却冻 {dir_word}；只许观望或平局打底，'
+                    f'须写一行 λ_mirror=触发｜相对差={rel*100:.1f}%（V17.4.100）'
+                ),
+            })
+    return out
+
+
+def lint_massacre_bracket(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.100（承 V17.4.26/4.77，升 ERROR）：屠杀旁格强制。
+
+    让球 ≥1 球、让球侧 = λ 优势侧、非镜像、方向非观望且已给比分篮时，
+    篮（保守Top / Top3 / 旁挂）至少一格该侧 净胜≥2 且总分≥3
+    （3-1/3-0/4-0/4-1 族；2-0 不算，它属于主篮而非旁格）。
+    依据：11-23 布伦特福德 4-0（篮 1-0/1-1/0-0/2-0 无格）；
+    11-20 特鲁瓦 3-1（篮 1-1/1-0/2-1/0-1 无格）；
+    08-27 萨尔茨堡 3-0 / 安德莱 3-0 旁漏格、比尔森 4-1 靠旁挂救——同类 ≥3。
+    """
+    if not day or day < MASSACRE_BRACKET_DAY:
+        return []
+    out = []
+    for sec in sections:
+        blob = '\n'.join(sec.get('lines') or [])
+        header = sec.get('header') or ''
+        lam = _parse_lambdas(blob)
+        if not lam:
+            continue
+        lh, la = lam
+        if abs(lh - la) / max(lh, la) < MIRROR_LAMBDA_REL:
+            continue  # 镜像场交给 lint_mirror_direction
+        dir_word = _parse_direction_word(blob)
+        if dir_word == '观望':
+            continue
+        m_hc = re.search(r'让\s*([+-]\d+(?:\.\d+)?)', blob)
+        if not m_hc:
+            continue
+        hc = float(m_hc.group(1))
+        if hc <= -1 and lh > la:
+            need_side, need = '主', '主净胜≥2且总分≥3'
+        elif hc >= 1 and la > lh:
+            need_side, need = '客', '客净胜≥2且总分≥3'
+        else:
+            continue  # 让球侧与 λ 优势侧不一致，不在本规则范围
+        # 比分篮：保守Top / Top3 / 旁挂行
+        score_lines = [
+            ln for ln in (sec.get('lines') or [])
+            if re.search(r'保守Top|Top\s*3|【比分推荐|比分[^=]*=', ln) or re.search(r'旁\s*\d', ln)
+        ]
+        if not score_lines:
+            continue  # 比分弃权，不检查
+        scores = [
+            (int(a), int(b))
+            for ln in score_lines
+            for a, b in re.findall(r'(\d+)\s*[-:：]\s*(\d+)', ln)
+        ]
+        if not scores:
+            continue
+        if need_side == '主':
+            ok = any(h - a >= 2 and h + a >= 3 for h, a in scores)
+        else:
+            ok = any(a - h >= 2 and h + a >= 3 for h, a in scores)
+        if not ok:
+            shown = '/'.join(f'{h}-{a}' for h, a in scores[:4])
+            out.append({
+                'rule': 'lint_massacre_bracket',
+                'severity': 'ERROR',
+                'match': header[:50],
+                'message': (
+                    f'比分篮[{shown}]缺{need}屠杀旁格'
+                    f'（让球{hc:+g}且{need_side}为λ优势侧；红牌/门将神扑外'
+                    f'让球方屠杀须有逃生格；V17.4.100 承 4.26/4.77）'
+                ),
+            })
+    return out
+
+
+def lint_direction_vs_model(sections: list[dict], day: str | None = None) -> list[dict]:
+    """
+    V17.4.100 shadow（WARN，同类≥2 才立硬闸）：方向档允许集不含 p_model 最高项。
+
+    证据积累器：方向档吃叙事压边而概率只当陪审时点名。
+    依据：11-23 蒙扎 p_model 主 40.1% 为三项最高却冻客不败（实战主胜 3-0）。
+    """
+    if not day or day < MODEL_ARGMAX_DAY:
+        return []
+    out = []
+    allowed_map = {
+        '锁主': {'H'}, '主不败': {'H', 'D'}, '锁平': {'D'},
+        '客不败': {'D', 'A'}, '锁客': {'A'},
+    }
+    side_idx = {'H': 0, 'D': 1, 'A': 2}
+    for sec in sections:
+        blob = '\n'.join(sec.get('lines') or [])
+        header = sec.get('header') or ''
+        dir_word = _parse_direction_word(blob)
+        if dir_word not in allowed_map:
+            continue  # 观望/缺方向不查
+        pm = re.search(
+            r'p_model[^\d]*?(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)',
+            blob)
+        if not pm:
+            continue
+        try:
+            probs = [float(pm.group(i)) for i in (1, 2, 3)]
+        except ValueError:
+            continue
+        if sum(probs) <= 0:
+            continue
+        argmax_side = ['H', 'D', 'A'][probs.index(max(probs))]
+        if argmax_side not in allowed_map[dir_word]:
+            label = {'H': '主', 'D': '平', 'A': '客'}[argmax_side]
+            out.append({
+                'rule': 'lint_direction_vs_model',
+                'severity': 'WARN',
+                'match': header[:50],
+                'message': (
+                    f'p_model {label} {max(probs):.1f}% 为三项最高，'
+                    f'方向档 {dir_word} 允许集不含{label}——逆模型压边，'
+                    f'须点名反证为何盖过模型，否则降观望（V17.4.100 shadow）'
+                ),
+            })
+    return out
+
+
 def lint_summary_table(sections: list[dict], day: str | None = None, filepath: str | None = None) -> list[dict]:
     """
     V17.4.34 + V17.4.57：认真拆 ≥1 场时，全文须有固定列表头的全场汇总表。
@@ -3087,7 +3265,7 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
         day = m.group(0) if m else datetime.now().strftime('%Y-%m-%d')
     sections = parse_sections(filepath)
     print(f"稿日: {day}｜解析到 {len(sections)} 场比赛段")
-    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, HUB_PAIR={HUB_PAIR_DAY}, EDGE_HUB={EDGE_HUB_DAY}, MARKET_EDGE={MARKET_EDGE_DAY}, PLAY_FREE={PLAY_FREE_DAY}, DOUBLE={DOUBLE_DAY}, STYLE_FETCH={STYLE_FETCH_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}, PLAY_ROUTE={PLAY_ROUTE_DAY}, CONSERVATIVE={CONSERVATIVE_DAY}")
+    print(f"日闸: STRUCTURE_GATE={STRUCTURE_GATE_DAY}, DIR_MUST={DIR_MUST_DAY}, LEAN={LEAN_DAY}, EXCLUDE={EXCLUDE_DAY}, EXCLUDE_INTEL={EXCLUDE_INTEL_DAY}, SEASONING={SEASONING_DAY}, EURO_DEEP={EURO_DEEP_AWAY_DAY}, DUAL_DEBUT={DUAL_DEBUT_DAY}, SUMMARY={SUMMARY_TABLE_DAY}, SUMMARY_HC={SUMMARY_HC_COL_DAY}, HC_ONLY={HC_ONLY_DAY}, COLD_UPSET={COLD_UPSET_DAY}, HC_SPF_SINGLE={HC_SPF_SINGLE_DAY}, DEEP_LOCK={DEEP_LOCK_DAY}, TICKET={TICKET_DAY}, TICKET16={TICKET16_DAY}, TICKET_CROSS={TICKET_CROSS_DAY}, TICKET_STABLE={TICKET_STABLE_DAY}, HUB_PAIR={HUB_PAIR_DAY}, EDGE_HUB={EDGE_HUB_DAY}, MARKET_EDGE={MARKET_EDGE_DAY}, PLAY_FREE={PLAY_FREE_DAY}, DOUBLE={DOUBLE_DAY}, STYLE_FETCH={STYLE_FETCH_DAY}, SCORE_PACK={SCORE_PACK_DAY}, CANDIDATE={CANDIDATE_FIRST_DAY}, PROCESS={PROCESS_FILE_DAY}, LINEUP={LINEUP_GATE_DAY}, DELIVERY={DELIVERY_DAY}, FLOW_FIX={FLOW_FIX_DAY}, JUDGE_FIX={JUDGE_FIX_DAY}, QUALITY={QUALITY_LAYER_DAY}, ACCURACY={ACCURACY_DAY}, MUST_GATHER={MUST_GATHER_DAY}, FETCH_CHANNEL={FETCH_CHANNEL_DAY}, PLAY_ROUTE={PLAY_ROUTE_DAY}, CONSERVATIVE={CONSERVATIVE_DAY}, MIRROR={MIRROR_DIRECTION_DAY}, MASSACRE={MASSACRE_BRACKET_DAY}, ARGMAX={MODEL_ARGMAX_DAY}")
     print("-" * 60)
 
     all_warnings = []
@@ -3121,6 +3299,9 @@ def run_lint(filepath: str, day: str | None = None) -> dict:
             ("lint_both_score", lint_both_score),
             ("lint_state_crush", lint_state_crush),
             ("lint_market_divergence", lint_market_divergence),
+            ("lint_mirror_direction", lint_mirror_direction),
+            ("lint_massacre_bracket", lint_massacre_bracket),
+            ("lint_direction_vs_model", lint_direction_vs_model),
         ]
 
         for name, fn in rules:
