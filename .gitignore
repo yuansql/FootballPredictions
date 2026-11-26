@@ -10,3 +10,4 @@ venv/
 !.env.example
 .serena/
 .workbuddy/
+.box-agent-scratch/
